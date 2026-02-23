@@ -30,10 +30,10 @@ export type CodOptions = {
     new_customer_limit?: number  // in paise, default ₹1,500
     otp_threshold?: number       // in paise, default ₹3,000 — orders above this require OTP
     otp_expiry_minutes?: number  // OTP validity window, default 10 minutes
-    // Twilio credentials — read from env by default, but can be overridden here
-    twilio_account_sid?: string
-    twilio_auth_token?: string
-    twilio_from_phone?: string   // E.164 format, e.g. "+12015551234" or an Indian Twilio number
+    // MSG91 credentials — read from env by default, but can be overridden here
+    msg91_auth_key?: string      // From MSG91 Dashboard → API Keys
+    msg91_template_id?: string   // Approved DLT OTP template ID from MSG91 → SendOTP → Templates
+    msg91_sender_id?: string     // 6-char DLT Sender ID (e.g. "VRDHIR"). Optional — defaults to MSG91 dashboard value
 }
 
 // ── OTP Utilities ─────────────────────────────────────────────────────────────
@@ -47,53 +47,56 @@ function hashOtp(otp: string, salt: string): string {
     return crypto.createHmac("sha256", salt).update(otp).digest("hex")
 }
 
-async function sendOtpViaTwilio(
+async function sendOtpViaMSG91(
     phone: string,
     otp: string,
     options: CodOptions
 ): Promise<void> {
-    const accountSid  = options.twilio_account_sid  ?? process.env.TWILIO_ACCOUNT_SID
-    const authToken   = options.twilio_auth_token   ?? process.env.TWILIO_AUTH_TOKEN
-    const fromPhone   = options.twilio_from_phone   ?? process.env.TWILIO_FROM_PHONE
+    const authKey    = options.msg91_auth_key    || process.env.MSG91_AUTH_KEY
+    const templateId = options.msg91_template_id || process.env.MSG91_OTP_TEMPLATE_ID
+    const senderId   = options.msg91_sender_id   || process.env.MSG91_SENDER_ID
 
-    if (!accountSid || !authToken || !fromPhone) {
+    if (!authKey || !templateId) {
         // Throw — not warn+return — so initiatePayment's try/catch blocks checkout.
         // A silent return here would create a phantom OTP session: otp_required=true
         // with a real hash stored but NO SMS sent. The customer sees the OTP prompt
         // but can never receive the code, permanently blocking their checkout.
         throw new Error(
-            "[COD OTP] Twilio credentials not configured. Set TWILIO_ACCOUNT_SID, " +
-            "TWILIO_AUTH_TOKEN, and TWILIO_FROM_PHONE in your .env file. " +
+            "[COD OTP] MSG91 credentials not configured. Set MSG91_AUTH_KEY and " +
+            "MSG91_OTP_TEMPLATE_ID in your .env file. " +
             "COD OTP cannot be sent without these credentials."
         )
     }
 
-    // We use the Twilio REST API directly to avoid requiring the @twilio/twilio-node
-    // SDK as a compile-time dependency (works with a simple fetch call).
-    const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
-    const body = new URLSearchParams({
-        From: fromPhone,
-        To:   phone,
-        Body: `Your Vridhira Marketplace COD verification code is: ${otp}. Valid for ${options.otp_expiry_minutes ?? 10} minutes. Do not share this code with anyone.`,
-    })
+    // MSG91 SendOTP API — JSON POST, authkey in header.
+    // Phone must be in format 91XXXXXXXXXX (country code + number, no leading +).
+    // Docs: https://docs.msg91.com/reference/send-otp
+    const mobile = phone.startsWith("+") ? phone.slice(1) : phone
 
-    const response = await fetch(url, {
+    const payload: Record<string, string> = {
+        template_id: templateId,
+        mobile,
+        otp,
+    }
+    if (senderId) payload.sender = senderId
+
+    const response = await fetch("https://control.msg91.com/api/v5/otp", {
         method: "POST",
         headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+            "Content-Type": "application/json",
+            authkey: authKey,
         },
-        body: body.toString(),
+        body: JSON.stringify(payload),
     })
 
     if (!response.ok) {
         const errorText = await response.text()
-        console.error(`[COD OTP] Twilio SMS failed (${response.status}): ${errorText}`)
-        throw new Error(`Failed to send OTP via Twilio: ${response.status}`)
+        console.error(`[COD OTP] MSG91 SMS failed (${response.status}): ${errorText}`)
+        throw new Error(`Failed to send OTP via MSG91: ${response.status}`)
     }
 
     const result = await response.json() as any
-    console.log(`[COD OTP] OTP sent successfully to ${phone.replace(/\d(?=\d{4})/g, "*")} — SID: ${result.sid}`)
+    console.log(`[COD OTP] OTP sent successfully to ${phone.replace(/\d(?=\d{4})/g, "*")} — request_id: ${result.request_id ?? "ok"}`)
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -103,7 +106,7 @@ async function sendOtpViaTwilio(
  *
  * Implements industry-standard COD with fraud prevention:
  * - Order value limits (₹100 min, ₹50,000 max)               ← enforced in initiatePayment
- * - Twilio OTP verification for orders >= ₹3,000              ← enforced in initiatePayment + verifyOtp
+ *   - MSG91 OTP verification for orders >= ₹3,000               ← enforced in initiatePayment + verifyOtp
  * - OTP reset on cart amount increase                         ← enforced in updatePayment
  *
  * NOTE — The following options are stored in `options_` for future use but are NOT
@@ -135,9 +138,9 @@ class CodPaymentService extends AbstractPaymentProvider<CodOptions> {
             new_customer_limit:  options.new_customer_limit  ?? 150000,   // ₹1,500
             otp_threshold:       options.otp_threshold       ?? 300000,   // ₹3,000
             otp_expiry_minutes:  options.otp_expiry_minutes  ?? 10,
-            twilio_account_sid:  options.twilio_account_sid  ?? "",
-            twilio_auth_token:   options.twilio_auth_token   ?? "",
-            twilio_from_phone:   options.twilio_from_phone   ?? "",
+            msg91_auth_key:      options.msg91_auth_key      ?? "",
+            msg91_template_id:   options.msg91_template_id   ?? "",
+            msg91_sender_id:     options.msg91_sender_id     ?? "",
         }
     }
 
@@ -212,6 +215,14 @@ class CodPaymentService extends AbstractPaymentProvider<CodOptions> {
     }
 
     /**
+     * Public wrapper for sendOtpViaMSG91 — used by the admin resend API route.
+     * Credentials and sender config are read from this.options_ (which falls back to env vars).
+     */
+    async sendOtp(phone: string, otp: string): Promise<void> {
+        return sendOtpViaMSG91(phone, otp, this.options_)
+    }
+
+    /**
      * Validate COD eligibility based on order amount
      */
     private validateOrderAmount(amount: number): void {
@@ -235,7 +246,7 @@ class CodPaymentService extends AbstractPaymentProvider<CodOptions> {
      * For orders >= otp_threshold (default ₹3,000):
      *   1. Generates a cryptographically random 6-digit OTP
      *   2. Hashes it with a per-session salt (HMAC-SHA256) — never stored in plain text
-     *   3. Sends the OTP to the customer's phone via Twilio SMS
+     *   3. Sends the OTP to the customer's phone via MSG91 SendOTP API
      *   4. Stores hash + salt + expiry in session data
      *   5. Sets `otp_required: true` — authorizePayment will block until OTP is verified
      *
@@ -295,10 +306,10 @@ class CodPaymentService extends AbstractPaymentProvider<CodOptions> {
         const expiresAt  = Date.now() + this.options_.otp_expiry_minutes * 60 * 1000
 
         try {
-            await sendOtpViaTwilio(phone, otp, this.options_)
+            await sendOtpViaMSG91(phone, otp, this.options_)
         } catch (err) {
-            // Twilio failure must BLOCK checkout, not silently bypass OTP.
-            // A Twilio outage or suspended number cannot become a fraud vector.
+            // MSG91 failure must BLOCK checkout, not silently bypass OTP.
+            // A MSG91 outage or misconfiguration cannot become a fraud vector.
             console.error(`[COD OTP] Failed to send OTP to phone for session ${sessionId}:`, (err as Error).message)
             throw new MedusaError(
                 MedusaError.Types.UNEXPECTED_STATE,
