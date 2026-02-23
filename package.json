@@ -24,7 +24,10 @@
   },
   "dependencies": {
     "@alpha-solutions/medusa-image-alt": "^1.1.0",
+    "@codee-sh/medusa-plugin-automations": "^1.0.10",
+    "@codee-sh/medusa-plugin-notification-emails": "^1.0.0",
     "@lambdacurry/medusa-product-reviews": "^1.3.0",
+    "@lambdacurry/medusa-webhooks": "^1.1.4",
     "@medusajs/admin-sdk": "2.13.1",
     "@medusajs/cli": "2.13.1",
     "@medusajs/framework": "2.13.1",

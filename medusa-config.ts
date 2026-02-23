@@ -77,6 +77,31 @@ module.exports = defineConfig({
         // document_language: 'en',
       },
     },
+    // Webhooks: send real-time HTTP notifications to external services on Medusa events.
+    // Manage webhook endpoints via admin → Webhooks (or POST /admin/webhooks).
+    // Add events you want to expose in `subscriptions` below.
+    // Source: https://medusajs.com/integrations/lambdacurry-webhooks/
+    {
+      resolve: "@lambdacurry/medusa-webhooks",
+      options: {
+        subscriptions: [
+          "order.placed",
+          "order.canceled",
+          "order.fulfillment_created",
+          "customer.created",
+          "product.created",
+          "product.updated",
+        ],
+      },
+    },
+    // Automations: rule-based workflows triggered by events, schedules, or manual actions.
+    // Create automations in admin → Notifications → Automations.
+    // Supports email, Slack, and custom actions with if/then condition rules.
+    // Source: https://medusajs.com/integrations/@codee-automations/
+    {
+      resolve: "@codee-sh/medusa-plugin-automations",
+      options: {},
+    },
   ],
   modules: [
     // ── Custom: Wishlist Module ──────────────────────────────────────────────
