@@ -1,18 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import Razorpay from "razorpay"
-
-// ── helpers ────────────────────────────────────────────────────────────────────
-
-function getRazorpay() {
-    const key_id = process.env.RAZORPAY_KEY_ID
-    const key_secret = process.env.RAZORPAY_KEY_SECRET
-
-    if (!key_id || !key_secret) {
-        throw new Error("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set in .env")
-    }
-
-    return new Razorpay({ key_id, key_secret })
-}
+import { getRazorpay } from "../../../../lib/razorpay"
 
 // ── GET /admin/custom/razorpay ─────────────────────────────────────────────────
 // Query params:
@@ -61,14 +48,19 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
             })
         }
 
-        // Payment method breakdown from this batch
+        // Payment method breakdown — computed from the filtered set so it matches
+        // exactly what the admin sees in the table.
         const methodBreakdown: Record<string, number> = {}
         for (const p of payments) {
             const method: string = p.method ?? "other"
             methodBreakdown[method] = (methodBreakdown[method] ?? 0) + 1
         }
 
-        // Quick summary stats from this batch
+        // Quick summary stats — computed from the SAME filtered set so the numbers
+        // are consistent with what is displayed in the table.
+        // NOTE: these stats only cover the current page (max 100 items). If more
+        // payments exist outside this window the counts will be partial. Razorpay
+        // does not expose aggregation endpoints, so this is a known limitation.
         const todayStart = new Date()
         todayStart.setHours(0, 0, 0, 0)
         const todayTs = Math.floor(todayStart.getTime() / 1000)
@@ -77,7 +69,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
         let refundedToday = 0
         let pendingCaptures = 0
 
-        for (const p of result.items ?? []) {
+        for (const p of payments) {
             const createdAt = p.created_at ?? 0
             if (p.status === "captured" && createdAt >= todayTs) capturedToday += p.amount ?? 0
             if (p.status === "refunded" && createdAt >= todayTs) refundedToday += p.amount_refunded ?? 0

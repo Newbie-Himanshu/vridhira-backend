@@ -47,6 +47,42 @@ function hashOtp(otp: string, salt: string): string {
     return crypto.createHmac("sha256", salt).update(otp).digest("hex")
 }
 
+/**
+ * Validates that a phone number is a plausible Indian mobile number.
+ * Accepts formats: 10 digits (9XXXXXXXX), +91XXXXXXXXXX, 91XXXXXXXXXX.
+ * Returns the normalised 12-digit MSG91 format (91XXXXXXXXXX) on success,
+ * or throws a MedusaError so the customer gets a clear checkout error.
+ *
+ * Why this matters:
+ *   Without validation, a customer who sets a landline, an international number,
+ *   or a malformed string as their billing phone will hit MSG91 and get an opaque
+ *   "OTP send failed" error instead of a clear "please enter a valid mobile number".
+ *   Also prevents SMS being sent to unrelated numbers in other countries.
+ */
+function validateAndNormaliseIndianPhone(raw: string): string {
+    // Strip all whitespace and common formatting characters
+    const cleaned = raw.replace(/[\s()\-]/g, "")
+
+    // Match:
+    //   +91XXXXXXXXXX  (international format)
+    //    91XXXXXXXXXX  (without +)
+    //      XXXXXXXXXX  (local 10-digit format, starting with 6–9)
+    const match =
+        cleaned.match(/^(?:\+?91)(\d{10})$/) ??
+        cleaned.match(/^([6-9]\d{9})$/)
+
+    if (!match) {
+        throw new MedusaError(
+            MedusaError.Types.INVALID_DATA,
+            "A valid Indian mobile number (10 digits starting with 6–9) is required for COD orders " +
+            "above the OTP threshold. Please update your phone number to a valid Indian mobile."
+        )
+    }
+
+    // Normalise to 91XXXXXXXXXX (MSG91 expected format, no leading +)
+    return `91${match[1]}`
+}
+
 async function sendOtpViaMSG91(
     phone: string,
     otp: string,
@@ -302,13 +338,17 @@ class CodPaymentService extends AbstractPaymentProvider<CodOptions> {
             )
         }
 
+        // Validate and normalise to MSG91's expected format (91XXXXXXXXXX).
+        // Throws a clear, customer-facing MedusaError for landlines or non-Indian numbers.
+        const normalisedPhone = validateAndNormaliseIndianPhone(phone)
+
         const otp        = generateOtp()
         const salt       = crypto.randomBytes(16).toString("hex")
         const otpHash    = hashOtp(otp, salt)
         const expiresAt  = Date.now() + this.options_.otp_expiry_minutes * 60 * 1000
 
         try {
-            await sendOtpViaMSG91(phone, otp, this.options_)
+            await sendOtpViaMSG91(normalisedPhone, otp, this.options_)
         } catch (err) {
             // MSG91 failure must BLOCK checkout, not silently bypass OTP.
             // A MSG91 outage or misconfiguration cannot become a fraud vector.
@@ -330,7 +370,7 @@ class CodPaymentService extends AbstractPaymentProvider<CodOptions> {
                 otp_hash:     otpHash,
                 otp_salt:     salt,
                 otp_expires_at: expiresAt,
-                otp_phone_last4: phone.slice(-4), // for UI display only
+                otp_phone_last4: normalisedPhone.slice(-4), // for UI display only
             },
         }
     }

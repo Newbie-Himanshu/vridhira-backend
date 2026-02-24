@@ -1,8 +1,13 @@
 /**
- * POST /admin/algolia/sync
+ * POST /admin/algolia/sync  [DEPRECATED]
  *
- * Emits the `algolia.sync` event, which triggers the algolia-sync subscriber
- * to do a full paginated reindex of all products.
+ * Legacy endpoint kept for backwards compatibility.
+ * Prefer POST /admin/search/sync which respects the active provider selection
+ * (Admin → Search → Provider tab).
+ *
+ * This route still works but always triggers an Algolia reindex regardless of
+ * the current active provider. If you have switched to Meilisearch, use
+ * /admin/search/sync instead.
  *
  * Protected by admin authentication (applied automatically by Medusa to all
  * routes under /admin/**).
@@ -18,5 +23,8 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     data: {},
   })
 
-  res.json({ message: "Algolia full reindex started in the background." })
+  res.json({
+    message: "Algolia full reindex started in the background.",
+    deprecation_notice: "This endpoint is deprecated. Use POST /admin/search/sync to respect the active provider setting.",
+  })
 }

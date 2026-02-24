@@ -38,7 +38,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   }
 
   if (order.customer_id !== customerId) {
-    return res.status(403).json({ error: "Forbidden: you do not own this order" })
+    // Return 404 (not 403) to avoid confirming the order ID exists to an
+    // authenticated customer probing IDs they don't own (IDOR enumeration).
+    return res.status(404).json({ error: "Order not found" })
   }
 
   // ── 2. Generate PDF using the RSC Labs documents module ──────────────────
@@ -63,7 +65,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   }
 
   // ── 3. Stream the PDF to the customer ────────────────────────────────────
-  const fileName = `invoice-${result.invoice?.displayNumber ?? id}.pdf`
+  const fileName = `invoice-${String(result.invoice?.displayNumber ?? id).replace(/[^\w.-]/g, "_")}.pdf`
 
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`)
