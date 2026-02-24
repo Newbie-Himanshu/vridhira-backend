@@ -1,5 +1,9 @@
 import crypto from "crypto"
 import { AbstractPaymentProvider, MedusaError } from "@medusajs/framework/utils"
+import logger from "../../lib/logger"
+import { getRedisClient } from "../../lib/redis-client"
+
+const log = logger.child({ module: "cod-payment" })
 import {
     ProviderWebhookPayload,
     WebhookActionResult,
@@ -132,7 +136,7 @@ async function sendOtpViaMSG91(
     }
 
     const result = await response.json() as any
-    console.log(`[COD OTP] OTP sent successfully to ${phone.replace(/\d(?=\d{4})/g, "*")} — request_id: ${result.request_id ?? "ok"}`)
+    log.info({ request_id: result.request_id ?? "ok", phone_masked: phone.replace(/\d(?=\d{4})/g, "*") }, "OTP sent via MSG91")
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -347,19 +351,40 @@ class CodPaymentService extends AbstractPaymentProvider<CodOptions> {
         const otpHash    = hashOtp(otp, salt)
         const expiresAt  = Date.now() + this.options_.otp_expiry_minutes * 60 * 1000
 
+        // ── Redis OTP send rate limit ─────────────────────────────────────
+        // Prevents SMS bombing: at most 1 OTP SMS per phone number per 60 seconds.
+        // Fail open on Redis errors so a Redis outage never blocks checkout.
+        try {
+            const redis = getRedisClient()
+            const rlKey = `cod:otp:rl:${normalisedPhone}`
+            // ioredis v5 typings don't cover SET + NX + EX in one overload.
+            // Use call() (raw Redis command) for the atomic SET NX EX.
+            const set = await redis.call("SET", rlKey, "1", "NX", "EX", "60") as string | null
+            if (set === null) {
+                throw new MedusaError(
+                    MedusaError.Types.NOT_ALLOWED,
+                    "An OTP was recently sent to this number. Please wait 60 seconds before requesting a new code."
+                )
+            }
+        } catch (rlErr) {
+            if (rlErr instanceof MedusaError) throw rlErr
+            // Redis unavailable — log and continue (fail open)
+            log.warn({ err: rlErr }, "Redis OTP rate-limit check unavailable — proceeding without limit")
+        }
+
         try {
             await sendOtpViaMSG91(normalisedPhone, otp, this.options_)
         } catch (err) {
             // MSG91 failure must BLOCK checkout, not silently bypass OTP.
             // A MSG91 outage or misconfiguration cannot become a fraud vector.
-            console.error(`[COD OTP] Failed to send OTP to phone for session ${sessionId}:`, (err as Error).message)
+            log.error({ err, sessionId }, "Failed to send OTP via MSG91")
             throw new MedusaError(
                 MedusaError.Types.UNEXPECTED_STATE,
                 "Could not send the OTP to your phone number. Please try again in a moment or use a different payment method."
             )
         }
 
-        console.log(`[COD OTP] OTP initiated for session ${sessionId} | amount: ₹${numericAmount / 100} | expires: ${new Date(expiresAt).toISOString()}`)
+        log.info({ sessionId, amount_inr: numericAmount / 100, expires: new Date(expiresAt).toISOString() }, "COD OTP initiated")
 
         return {
             id: sessionId,
@@ -418,9 +443,7 @@ class CodPaymentService extends AbstractPaymentProvider<CodOptions> {
             (wasOtpVerified && newAmount > prevAmount && nowNeedsOtp)
 
         if (shouldResetOtp) {
-            console.log(
-                `[COD] OTP state reset on updatePayment — amount: ₹${prevAmount / 100} → ₹${newAmount / 100}`
-            )
+            log.info({ prev_amount_inr: prevAmount / 100, new_amount_inr: newAmount / 100 }, "COD OTP state reset on amount change")
             return {
                 data: {
                     ...currentData,

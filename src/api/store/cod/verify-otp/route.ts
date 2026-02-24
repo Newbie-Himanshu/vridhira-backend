@@ -1,6 +1,9 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules, ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import CodPaymentService from "../../../../modules/cod-payment/service"
+import logger from "../../../../lib/logger"
+
+const log = logger.child({ module: "cod-verify-otp" })
 
 /**
  * POST /store/cod/verify-otp
@@ -100,7 +103,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
                     })
                     const cart = (carts as any[])?.[0]
                     if (!cart || cart.customer_id !== customerId) {
-                        console.warn(`[COD OTP] Ownership check failed — session ${payment_session_id} cart belongs to ${cart?.customer_id ?? "unknown"}, not ${customerId}`)
+                        log.warn({ session_id: payment_session_id, cart_owner: cart?.customer_id ?? "unknown", requester: customerId }, "COD OTP ownership check failed")
                         return res.status(403).json({ error: "You do not have permission to verify this payment session" })
                     }
                 }
@@ -171,7 +174,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
             data: updatedData,
         })
 
-        console.log(`[COD OTP] OTP successfully verified for session ${payment_session_id}`)
+        log.info({ session_id: payment_session_id }, "COD OTP successfully verified")
 
         return res.status(200).json({
             verified: true,
@@ -182,7 +185,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
         const isMedusaError = error?.name === "MedusaError" || error?.type
         const statusCode = isMedusaError ? 400 : 500
 
-        console.error(`[COD OTP] Verification failed for session ${payment_session_id}:`, error.message)
+        log.error({ err: error, session_id: payment_session_id }, "COD OTP verification failed")
 
         return res.status(statusCode).json({
             error: error.message ?? "OTP verification failed",

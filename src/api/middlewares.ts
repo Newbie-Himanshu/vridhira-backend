@@ -1,6 +1,9 @@
 import { defineMiddlewares, authenticate } from "@medusajs/framework/http"
 import type { MedusaRequest, MedusaResponse, MedusaNextFunction } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import logger from "../lib/logger"
+
+const log = logger.child({ module: "middlewares" })
 
 // ── Verified-purchase middleware ───────────────────────────────────────────────
 // Applied to POST /store/product-reviews (the @lambdacurry/medusa-product-reviews
@@ -57,8 +60,8 @@ async function requireVerifiedPurchase(
     if (fullName) body.display_name = fullName
 
     return next()
-  } catch (err) {
-    console.error("[ReviewMiddleware] Error:", (err as Error).message)
+    } catch (err) {
+    log.error({ err }, "ReviewMiddleware error")
     return res.status(500).json({ message: "Failed to verify purchase eligibility." })
   }
 }
