@@ -1,5 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { createSign } from "crypto"
+import { getAccessToken, runReport, resolveGAConfig } from "./_lib"
 
 // ── GET /admin/custom/ga4 ──────────────────────────────────────────────────
 // Uses GA4 Data API over plain HTTPS REST — no gRPC, no proto-loader, no
@@ -13,85 +13,6 @@ import { createSign } from "crypto"
 //   GA_SERVICE_ACCOUNT_KEY  — JSON string of a Google Service Account key
 //                             with "Viewer" access on the GA4 property
 
-// ── Service-account JWT → OAuth2 access token ─────────────────────────────
-
-type ServiceAccountKey = { client_email: string; private_key: string }
-type TokenCache = { token: string; expiresAt: number }
-let _tokenCache: TokenCache | null = null
-
-async function getAccessToken(key: ServiceAccountKey): Promise<string> {
-  const now = Math.floor(Date.now() / 1000)
-  if (_tokenCache && _tokenCache.expiresAt > now + 60) return _tokenCache.token
-
-  const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url")
-  const payload = Buffer.from(JSON.stringify({
-    iss:   key.client_email,
-    scope: "https://www.googleapis.com/auth/analytics.readonly",
-    aud:   "https://oauth2.googleapis.com/token",
-    iat:   now,
-    exp:   now + 3600,
-  })).toString("base64url")
-
-  const sign = createSign("RSA-SHA256")
-  sign.update(`${header}.${payload}`)
-  const sig = sign.sign(key.private_key, "base64url")
-  const jwt = `${header}.${payload}.${sig}`
-
-  const resp = await fetch("https://oauth2.googleapis.com/token", {
-    method:  "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body:    new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion:  jwt,
-    }),
-  })
-  if (!resp.ok) {
-    const text = await resp.text()
-    throw new Error(`Token exchange failed (${resp.status}): ${text}`)
-  }
-  const data: any = await resp.json()
-  _tokenCache = { token: data.access_token, expiresAt: now + (data.expires_in ?? 3600) }
-  return _tokenCache.token
-}
-
-// ── GA4 Data API REST helper ───────────────────────────────────────────────
-
-async function runReport(token: string, propertyId: string, body: object): Promise<any> {
-  const url = `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`
-  const resp = await fetch(url, {
-    method:  "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body:    JSON.stringify(body),
-  })
-  if (!resp.ok) {
-    const text = await resp.text()
-    let message = `GA4 API error (${resp.status})`
-    let activationUrl: string | undefined
-    try {
-      const errJson  = JSON.parse(text)
-      const errObj   = errJson?.error
-      if (errObj?.message) message = errObj.message
-      for (const detail of errObj?.details ?? []) {
-        if (detail?.metadata?.activationUrl) {
-          activationUrl = detail.metadata.activationUrl
-          break
-        }
-        for (const link of detail?.links ?? []) {
-          if ((link?.url as string)?.includes("analyticsdata")) {
-            activationUrl = link.url
-            break
-          }
-        }
-        if (activationUrl) break
-      }
-    } catch { /* not JSON — keep generic message */ }
-    const err = new Error(message) as any
-    if (activationUrl) err.activationUrl = activationUrl
-    throw err
-  }
-  return resp.json()
-}
-
 const GA_ECOMMERCE_EVENTS = new Set([
   "add_to_cart",
   "remove_from_cart",
@@ -104,27 +25,16 @@ const GA_ECOMMERCE_EVENTS = new Set([
 ])
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
-  const propertyId = process.env.GA_PROPERTY_ID?.trim()
-  const rawKey     = process.env.GA_SERVICE_ACCOUNT_KEY?.trim()
-  const hasMeasId  = !!process.env.GA_MEASUREMENT_ID?.trim()
-
-  if (!propertyId || !rawKey) {
-    return res.json({
-      configured:           false,
-      measurement_tracking: hasMeasId,
-      missing: [
-        ...(!propertyId ? ["GA_PROPERTY_ID"] : []),
-        ...(!rawKey     ? ["GA_SERVICE_ACCOUNT_KEY"] : []),
-      ],
-    })
-  }
+  const hasMeasId = !!process.env.GA_MEASUREMENT_ID?.trim()
+  const cfg = resolveGAConfig(hasMeasId)
+  if (!cfg.ok) return res.json(cfg.missingResponse)
+  const { key, propertyId } = cfg
 
   const { days = "30" } = req.query as Record<string, string>
   const daysNum = Math.max(1, Math.min(90, Number(days) || 30))
   const range   = { startDate: `${daysNum}daysAgo`, endDate: "today" }
 
   try {
-    const key: ServiceAccountKey = JSON.parse(rawKey)
     const token = await getAccessToken(key)
 
     const [summaryData, eventsData, pagesData, trendData] = await Promise.all([
@@ -138,6 +48,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
           { name: "bounceRate" },
           { name: "averageSessionDuration" },
           { name: "newUsers" },
+          { name: "purchaseRevenue" },
+          { name: "transactions" },
         ],
       }),
       // 2. Event breakdown
@@ -174,6 +86,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       bounce_rate:          parseFloat((mv(3) * 100).toFixed(1)),
       avg_session_duration: Math.round(mv(4)),
       new_users:            mv(5),
+      revenue:              parseFloat(mv(6).toFixed(2)),
+      transactions:         mv(7),
     }
 
     const allEvents = (eventsData.rows ?? []).map((row: any) => ({

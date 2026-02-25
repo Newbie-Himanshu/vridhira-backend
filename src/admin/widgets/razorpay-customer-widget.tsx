@@ -95,8 +95,11 @@ const RazorpayCustomerWidget = ({ data: customer }: DetailWidgetProps<AdminCusto
     if (payments.length === 0) {
         return (
             <Container className="divide-y p-0">
-                <div className="px-6 py-4">
+                <div className="flex items-center justify-between px-6 py-4">
                     <Heading level="h2">Razorpay Payments</Heading>
+                    <Link to="/ga4/acquisition" className="text-xs text-ui-fg-interactive hover:underline">
+                        GA4 Acquisition ↗
+                    </Link>
                 </div>
                 <div className="px-6 py-4">
                     <Text size="small" className="text-ui-fg-subtle">
@@ -112,9 +115,14 @@ const RazorpayCustomerWidget = ({ data: customer }: DetailWidgetProps<AdminCusto
             {/* ── Header ── */}
             <div className="flex items-center justify-between px-6 py-4">
                 <Heading level="h2">Razorpay Payments</Heading>
-                <Link to="/razorpay" className="text-xs text-ui-fg-interactive hover:underline">
-                    View all →
-                </Link>
+                <div className="flex items-center gap-3">
+                    <Link to="/razorpay" className="text-xs text-ui-fg-interactive hover:underline">
+                        View all →
+                    </Link>
+                    <Link to="/ga4/acquisition" className="text-xs text-ui-fg-interactive hover:underline">
+                        GA4 Acquisition ↗
+                    </Link>
+                </div>
             </div>
 
             {/* ── Summary ── */}

@@ -66,17 +66,57 @@ An India-focused e-commerce backend built on **MedusaJS v2**, extending the fram
 - Requires `GA_MEASUREMENT_ID` and `GA_API_SECRET`
 
 ### Google Analytics 4 — Admin Dashboard
-API proxy: `src/api/admin/custom/ga4/route.ts`
-Admin UI: `src/admin/routes/ga4/page.tsx`
 
-- Admin sidebar page **"GA4 Analytics"** at `/app/ga4`
-- Summary metrics: sessions, active users, new users, page views, bounce rate, avg. session duration
-- Ecommerce event breakdown, top pages, top events, daily trend table
-- Day-range filter: 7 / 30 / 90 days
-- Uses GA4 Data API over plain HTTPS REST — no gRPC, no native bindings (works on Windows)
-- Service-account JWT authentication with in-memory token caching
-- Graceful error states: not-configured setup guide, API-disabled enable link, credential errors
-- Requires `GA_PROPERTY_ID` and `GA_SERVICE_ACCOUNT_KEY` (full JSON string)
+A full multi-tab analytics suite embedded in the Medusa admin panel. All reporting uses the GA4 Data API over plain HTTPS REST — no gRPC, no native bindings (works on Windows and any Node environment).
+
+**Shared backend** (`src/api/admin/custom/ga4/_lib.ts`): Service-account JWT auth with 55-min token cache; 15-min report cache keyed by endpoint + day-range.
+
+**Shared frontend** (`src/admin/lib/ga4-shared.tsx`): `MetricCard`, `DaysFilter`, `GA4NavCard`, `GA4PageHeader`, `LoadingState`, `ErrorState`, `inr()`, `fmt()`, `fmtDuration()`; `useGA4Hotkeys()` for keyboard navigation.
+
+#### Tab 1 — Overview `/app/ga4`
+- Summary KPI cards: Sessions, Active Users, New Users, Page Views, Bounce Rate, Avg. Session Duration
+- Revenue row: Total Revenue (₹), Orders, Average Order Value (when GA4 ecommerce is active)
+- Ecommerce event breakdown + Top Pages + Top Events + Daily Trend table
+- Navigation cards to all 4 child tabs with hotkey badges
+- Keyboard shortcuts: **G A** = overview, **G A P** = performance, **G A R** = products, **G A C** = acquisition, **G A F** = funnel
+
+#### Tab 2 — Performance `/app/ga4/performance`
+- KPI cards: Total Revenue, Orders, AOV, Conversion Rate (color-coded), Total Sessions
+- Peak Revenue Day callout
+- Daily Revenue Trend table (last 14 days, most-recent first)
+- API: `GET /admin/custom/ga4/performance?days=30`
+
+#### Tab 3 — Products `/app/ga4/products`
+- Sortable product table (6 sort columns: revenue / units sold / views / add-to-cart / cart% / refunds)
+- Per-product: Revenue (₹), Sold, Views, Cart Adds, Cart-to-Detail %, Refunds with color-coded badges
+- API: `GET /admin/custom/ga4/products?days=30`
+
+#### Tab 4 — Acquisition `/app/ga4/acquisition`
+- 3-tab view: **Channels** (revenue + conversion rate) · **Sources** (bounce rate, session duration) · **Campaigns** (UTM data, filters `(not set)`)
+- Summary KPIs: Acquisition Revenue, Orders, Total Sessions, Top Channel
+- API: `GET /admin/custom/ga4/acquisition?days=30`
+
+#### Tab 5 — Funnel `/app/ga4/funnel`
+- Visual proportional funnel bars: View Item → Add to Cart → Begin Checkout → Purchase
+- Step breakdown table: retained % (color-coded) + drop-off %
+- Cart Abandonment Rate + Overall Conversion (view→purchase) summary
+- Daily funnel last 7 days table
+- API: `GET /admin/custom/ga4/funnel?days=30`
+
+#### Widget GA4 Hotlinks
+Every admin widget has a context-appropriate **"GA4 ↗"** link that routes directly to the relevant analytics tab:
+
+| Widget | Hotlink target |
+|--------|----------------|
+| `razorpay-order-widget` | Performance tab |
+| `razorpay-customer-widget` | Acquisition tab |
+| `razorpay-summary-widget` | Overview tab |
+| `cod-remittance-widget` | Funnel tab |
+| `cod-otp-status` | Funnel tab |
+
+**Authentication:** Service-account JWT → OAuth2 Bearer token, automatically refreshed every 55 min.  
+**Graceful error states:** not-configured setup guide, API-disabled enable link, credential errors.  
+**Required env vars:** `GA_PROPERTY_ID`, `GA_SERVICE_ACCOUNT_KEY` (full JSON key file content as a single-line string).
 
 ### Wishlist (`src/modules/wishlist/`)
 - Custom Medusa module with `WishlistItem` data model
@@ -172,13 +212,25 @@ Copy `.env.template` to `.env` and fill in all values.
 ```
 src/
 ├── admin/                      # Admin UI extensions
+│   ├── lib/
+│   │   └── ga4-shared.tsx      # Shared GA4 components, formatters, hotkeys hook
 │   ├── routes/
-│   │   ├── ga4/                # GA4 Analytics dashboard page
+│   │   ├── ga4/                # GA4 Analytics overview (+ 4 child tabs)
+│   │   │   ├── performance/    #   Revenue, orders, AOV, conversion rate
+│   │   │   ├── products/       #   Per-product revenue, views, cart rate
+│   │   │   ├── acquisition/    #   Channels, sources, UTM campaigns
+│   │   │   └── funnel/         #   View → Cart → Checkout → Purchase funnel
 │   │   ├── search-engine/      # Unified search engine management
 │   │   └── cod-remittance/     # COD remittance admin page
-│   └── widgets/                # Order / product admin widgets
+│   └── widgets/                # Order / product admin widgets (all with GA4 hotlinks)
 ├── api/                        # Custom API routes
-│   ├── admin/custom/ga4/       # GET /admin/custom/ga4 — GA4 Data API proxy
+│   ├── admin/custom/ga4/
+│   │   ├── _lib.ts             #   Shared auth + 15-min report cache
+│   │   ├── route.ts            #   GET /admin/custom/ga4 — overview
+│   │   ├── performance/        #   GET /admin/custom/ga4/performance
+│   │   ├── products/           #   GET /admin/custom/ga4/products
+│   │   ├── acquisition/        #   GET /admin/custom/ga4/acquisition
+│   │   └── funnel/             #   GET /admin/custom/ga4/funnel
 │   ├── admin/algolia/          # POST /admin/algolia/sync
 │   └── hooks/                  # Razorpay & Shiprocket webhooks
 ├── jobs/                       # Scheduled jobs

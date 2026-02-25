@@ -3,6 +3,7 @@ import { DetailWidgetProps, AdminOrder } from "@medusajs/framework/types"
 import { Badge, Button, Container, Heading, Text, toast } from "@medusajs/ui"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
+import { Link } from "react-router-dom"
 import { sdk } from "../lib/sdk"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -265,6 +266,12 @@ const RazorpayOrderWidget = ({ data: order }: DetailWidgetProps<AdminOrder>) => 
                     <Button variant="transparent" size="small" onClick={() => refetch()}>
                         ↻ Refresh
                     </Button>
+                    <Link
+                        to="/ga4/performance"
+                        className="text-xs text-ui-fg-interactive hover:underline"
+                    >
+                        GA4 Performance ↗
+                    </Link>
                 </div>
             </div>
 

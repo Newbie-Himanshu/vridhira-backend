@@ -94,6 +94,13 @@ const RazorpaySummaryWidget = () => {
                         >
                             View Razorpay →
                         </Link>
+                        <span className="text-ui-fg-muted select-none">·</span>
+                        <Link
+                            to="/ga4"
+                            className="text-xs text-ui-fg-interactive hover:underline"
+                        >
+                            GA4 Analytics ↗
+                        </Link>
                     </div>
                 ) : null}
             </div>

@@ -10,6 +10,7 @@ import {
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { sdk } from "../../lib/sdk"
+import { useGA4Hotkeys, GA4NavCard, HOTKEYS, inr } from "../../lib/ga4-shared"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -35,6 +36,8 @@ type GA4Data = {
     bounce_rate: number
     avg_session_duration: number
     new_users: number
+    revenue?: number
+    transactions?: number
   }
   ecommerce_events: { name: string; count: number }[]
   top_events: { name: string; count: number }[]
@@ -204,6 +207,7 @@ const SetupGuide = ({
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GA4Page = () => {
+  useGA4Hotkeys()
   const [days, setDays] = useState(30)
 
   const { data, isLoading, isError, refetch } = useQuery<GA4Response>({
@@ -349,6 +353,30 @@ const GA4Page = () => {
         </div>
       </Container>
 
+      {/* ── Commerce KPI row ──────────────────────────────────────────────── */}
+      {(d.summary.revenue !== undefined || d.summary.transactions !== undefined) && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <MetricCard
+            label="Total Revenue"
+            value={inr(d.summary.revenue ?? 0)}
+            sub={`Last ${d.days} days`}
+          />
+          <MetricCard
+            label="Orders"
+            value={String(d.summary.transactions ?? 0)}
+            sub="Completed purchases"
+          />
+          <MetricCard
+            label="Avg. Order Value"
+            value={(d.summary.transactions ?? 0) > 0
+              ? inr((d.summary.revenue ?? 0) / (d.summary.transactions ?? 1))
+              : inr(0)
+            }
+            sub="Revenue ÷ Orders"
+          />
+        </div>
+      )}
+
       {/* ── Metric cards ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <MetricCard label="Sessions"       value={fmt(d.summary.sessions)} />
@@ -477,6 +505,40 @@ const GA4Page = () => {
           </div>
         </Container>
       )}
+
+      {/* ── Detailed Analytics nav ───────────────────────────────────────────── */}
+      <Container className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <Heading level="h2">Detailed Analytics</Heading>
+          <Text size="small" className="text-ui-fg-muted">Shortcut: G A then key</Text>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <GA4NavCard
+            label="Core Performance"
+            description="Revenue, orders, AOV, conversion rate and daily revenue trend"
+            href={HOTKEYS.performance.path}
+            hotkey={HOTKEYS.performance.keys}
+          />
+          <GA4NavCard
+            label="Product Performance"
+            description="Top sellers, item views, add-to-cart rate, purchases and refunds"
+            href={HOTKEYS.products.path}
+            hotkey={HOTKEYS.products.keys}
+          />
+          <GA4NavCard
+            label="Customer Acquisition"
+            description="Traffic sources, channel revenue and campaign ROI"
+            href={HOTKEYS.acquisition.path}
+            hotkey={HOTKEYS.acquisition.keys}
+          />
+          <GA4NavCard
+            label="Shopping Funnel"
+            description="View → Cart → Checkout → Purchase funnel with drop-off rates"
+            href={HOTKEYS.funnel.path}
+            hotkey={HOTKEYS.funnel.keys}
+          />
+        </div>
+      </Container>
     </div>
   )
 }

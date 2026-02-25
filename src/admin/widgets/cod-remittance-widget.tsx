@@ -89,6 +89,13 @@ const CodRemittanceWidget = () => {
                         >
                             View all →
                         </Link>
+                        <span className="text-ui-fg-muted select-none">·</span>
+                        <Link
+                            to="/ga4/funnel"
+                            className="text-xs text-ui-fg-interactive hover:underline"
+                        >
+                            GA4 Funnel ↗
+                        </Link>
                     </div>
                 ) : null}
             </div>

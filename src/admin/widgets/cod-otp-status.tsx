@@ -2,6 +2,7 @@ import { defineWidgetConfig } from "@medusajs/admin-sdk"
 import { DetailWidgetProps, AdminOrder } from "@medusajs/framework/types"
 import { Badge, Button, Container, Heading, Text, toast } from "@medusajs/ui"
 import { useQuery, useMutation } from "@tanstack/react-query"
+import { Link } from "react-router-dom"
 import { sdk } from "../lib/sdk"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -88,17 +89,25 @@ const CodOtpStatusWidget = ({ data: order }: DetailWidgetProps<AdminOrder>) => {
             <div className="flex items-center justify-between px-6 py-4">
                 <Heading level="h2">COD · OTP Verification</Heading>
 
-                {status?.otp_required && !status.otp_verified && (
-                    <Button
-                        variant="secondary"
-                        size="small"
-                        isLoading={resending}
-                        disabled={resending}
-                        onClick={() => resend()}
+                <div className="flex items-center gap-2">
+                    {status?.otp_required && !status.otp_verified && (
+                        <Button
+                            variant="secondary"
+                            size="small"
+                            isLoading={resending}
+                            disabled={resending}
+                            onClick={() => resend()}
+                        >
+                            Resend OTP
+                        </Button>
+                    )}
+                    <Link
+                        to="/ga4/funnel"
+                        className="text-xs text-ui-fg-interactive hover:underline"
                     >
-                        Resend OTP
-                    </Button>
-                )}
+                        GA4 Funnel ↗
+                    </Link>
+                </div>
             </div>
 
             {/* ── Body ───────────────────────────────────────────────────── */}
