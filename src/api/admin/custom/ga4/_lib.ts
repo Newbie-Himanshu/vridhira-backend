@@ -21,6 +21,7 @@ type ReportCache = { data: unknown; expiresAt: number }
 // ── In-memory singletons (module-level — shared across all route files) ───────
 
 let _tokenCache: TokenCache | null                = null
+let _tokenInflight: Promise<string> | null        = null
 const _reportCache = new Map<string, ReportCache>()
 const CACHE_TTL_MS = 15 * 60 * 1000  // 15 minutes
 
@@ -30,35 +31,49 @@ export async function getAccessToken(key: ServiceAccountKey): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
   if (_tokenCache && _tokenCache.expiresAt > now + 60) return _tokenCache.token
 
-  const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url")
-  const payload = Buffer.from(JSON.stringify({
-    iss:   key.client_email,
-    scope: "https://www.googleapis.com/auth/analytics.readonly",
-    aud:   "https://oauth2.googleapis.com/token",
-    iat:   now,
-    exp:   now + 3600,
-  })).toString("base64url")
+  // Deduplicate concurrent token requests — if a fetch is already in flight,
+  // await the same promise instead of hitting the OAuth2 endpoint twice.
+  if (_tokenInflight) return _tokenInflight
 
-  const sign = createSign("RSA-SHA256")
-  sign.update(`${header}.${payload}`)
-  const sig = sign.sign(key.private_key, "base64url")
-  const jwt = `${header}.${payload}.${sig}`
+  _tokenInflight = (async () => {
+    try {
+      const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url")
+      const payload = Buffer.from(JSON.stringify({
+        iss:   key.client_email,
+        scope: "https://www.googleapis.com/auth/analytics.readonly",
+        aud:   "https://oauth2.googleapis.com/token",
+        iat:   now,
+        exp:   now + 3600,
+      })).toString("base64url")
 
-  const resp = await fetch("https://oauth2.googleapis.com/token", {
-    method:  "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body:    new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion:  jwt,
-    }),
-  })
-  if (!resp.ok) {
-    const text = await resp.text()
-    throw new Error(`Token exchange failed (${resp.status}): ${text}`)
-  }
-  const data: any = await resp.json()
-  _tokenCache = { token: data.access_token, expiresAt: now + (data.expires_in ?? 3600) }
-  return _tokenCache.token
+      const sign = createSign("RSA-SHA256")
+      sign.update(`${header}.${payload}`)
+      const sig = sign.sign(key.private_key, "base64url")
+      const jwt = `${header}.${payload}.${sig}`
+
+      const resp = await fetch("https://oauth2.googleapis.com/token", {
+        method:  "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body:    new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+          assertion:  jwt,
+        }),
+      })
+      if (!resp.ok) {
+        const text = await resp.text()
+        throw new Error(`Token exchange failed (${resp.status}): ${text}`)
+      }
+      const data: any = await resp.json()
+      _tokenCache = { token: data.access_token, expiresAt: now + (data.expires_in ?? 3600) }
+      return _tokenCache.token
+    } finally {
+      // Always clear the in-flight promise — whether succeeded or failed —
+      // so the next call after an error can retry cleanly.
+      _tokenInflight = null
+    }
+  })()
+
+  return _tokenInflight
 }
 
 // ── GA4 Data API REST helper ───────────────────────────────────────────────────
