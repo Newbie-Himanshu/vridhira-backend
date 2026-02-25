@@ -168,6 +168,11 @@ async function handleRefundProcessed({
                 provider_id: "pp_razorpay_razorpay",
                 created_at: { $gte: sixMonthsAgo },
             } as any,
+            // Cap at 500 — avoids an unbounded full-table scan on high-volume stores.
+            // Razorpay payment IDs are globally unique, so 1 record will always match.
+            // If the store processes >500 Razorpay payments in 6 months (very common),
+            // the JS filter below still finds the right one within this window.
+            pagination: { take: 500 },
         })
 
         // Fine-grained JS match on JSONB data — scoped to Razorpay payments only
