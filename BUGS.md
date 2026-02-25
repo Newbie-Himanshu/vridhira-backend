@@ -60,7 +60,7 @@ curl -X DELETE "http://<HOST>/indexes/products" \
 ```
 
 **Resolution Date:** 2026-02-25  
-**Fixed In Commit:** —
+**Fixed In Commit:** `78a633f`
 
 ---
 
