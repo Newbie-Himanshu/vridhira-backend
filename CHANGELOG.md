@@ -8,12 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and [Con
 ## [Unreleased] — 2026-02-26
 
 ### Security 🔐
-- **BUG-001**: Replace Meilisearch master key with scoped API key — startup guard in `meilisearch/service.ts` detects master/admin keys and throws in production; warns in dev. New setup script `src/scripts/create-meilisearch-scoped-key.ts` creates a least-privilege key (documents.add/get/delete + indexes.search/update on products index only).
-- **OTP TOCTOU Race (COD)**: Fixed read-modify-write race in `POST /store/cod/verify-otp`. Now uses atomic Redis `INCR` + Lua script (sets TTL on first increment). Two concurrent OTP attempts now each consume a distinct attempt slot. Falls back to session-data counter when Redis is unavailable so legitimate customers are never blocked by an outage.
-- **Global error handler**: Added `errorHandler` in `src/api/middlewares.ts` — `MedusaError` types are forwarded with their HTTP status; all other errors are logged server-side and a sanitized `INTERNAL_ERROR` message is returned to the client, preventing stack trace / table name leakage.
 
-### Added ✨
-- **`src/modules/razorpay-queue/`** — BullMQ-based Razorpay event queue module. The `POST /hooks/razorpay` endpoint now does exactly two things: verify HMAC signature (fail-closed), then enqueue the payload. A Worker with 3-attempt exponential-backoff processes events asynchronously and deduplicates Razorpay delivery retries using a `razorpay:event:{id}` Redis key (TTL 24h). Fixes the 5-second Razorpay webhook timeout risk.
+### Security 🔐
+- **BUG-006**: Fixed memory leak in COD in-memory OTP rate limiter. Expired entries are now cleaned up every hour, preventing unbounded growth if Redis recovers and fallback is not triggered again.
 - **COD Fraud Detection System** — end-to-end feature tracking COD cancellation behaviour:
   - `src/lib/util/cod-fraud.ts` — shared metadata reader/writer, block message formatter
   - `src/subscribers/cod-fraud-tracker.ts` — `order.canceled` subscriber: increments `cod_cancellations` strike on customer-initiated COD cancellations; sets `cod_blocked: true` after threshold; records a queued admin notification

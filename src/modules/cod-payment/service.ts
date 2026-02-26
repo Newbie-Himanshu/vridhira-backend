@@ -34,9 +34,17 @@ export const MAX_OTP_ATTEMPTS = 5
 // ── In-memory OTP rate limit fallback ─────────────────────────────────────────
 // Used ONLY when Redis is unavailable (BUG-006 fix).
 // Maps phone → timestamp when the lock expires (Unix ms).
-// Map entries are cleaned up on each check to avoid a memory leak in long-running processes.
+// Periodic cleanup prevents memory leak if Redis recovers and fallback is not triggered again.
 // Single-process safety only — does not cover multi-instance deployments.
 const inMemoryOtpRateLimit = new Map<string, number>()
+
+// Periodic cleanup: remove expired entries every hour
+setInterval(() => {
+    const now = Date.now()
+    for (const [k, v] of inMemoryOtpRateLimit) {
+        if (now > v) inMemoryOtpRateLimit.delete(k)
+    }
+}, 3600000) // 1 hour in ms
 
 export type CodOptions = {
     min_order_amount?: number    // in paise, default ₹100

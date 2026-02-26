@@ -4,8 +4,10 @@
  * Handles Razorpay webhook payloads that have been dequeued from BullMQ.
  *
  * Security: Idempotency is enforced via a per-event Redis key
- * (razorpay:event:{eventId}) so Razorpay's retry attempts do not process an
- * event twice, even if the Worker restarts between retries.
+ * (razorpay:processed:{eventId}) written ONLY after successful processing.
+ * A GET at job-start checks whether a prior attempt already succeeded.
+ * A failed/crashed job leaves no key, so BullMQ retries run the full handler
+ * again — eliminating the "Zombie Lock" where SET NX at job-start blocked retries.
  *
  * Each event type:
  *   payment.authorized — logged only (medusa-plugin-razorpay-v2 handles capture)
@@ -35,21 +37,21 @@ export function createRazorpayProcessor(container: any) {
         }
 
         // ── Idempotency guard ────────────────────────────────────────────
-        // SET NX EX: atomic — only succeeds for the FIRST worker to claim this event.
-        let redis
+        // READ-FIRST: check if a PRIOR attempt already completed successfully.
+        // The key is written ONLY after all processing succeeds (end of this closure).
+        // A failed/crashed job leaves no key → BullMQ retries run the full handler.
+        // This eliminates the Zombie Lock where SET NX at job-start blocked all retries.
+        const redis = getRedisClient()
+        const idempotencyKey = `razorpay:processed:${eventId}`
         try {
-            redis = getRedisClient()
-            const idempotencyKey = `razorpay:event:${eventId}`
-            const claimed = await redis.set(idempotencyKey, "1", "NX", "EX", String(IDEMPOTENCY_TTL_SECS))
-            if (claimed === null) {
-                log.info({ eventId, event, jobId: job.id }, "Razorpay event already processed — skipping duplicate")
-                return "duplicate"
+            const alreadyDone = await redis.get(idempotencyKey)
+            if (alreadyDone) {
+                log.info({ eventId, event, jobId: job.id }, "Razorpay event already completed on a prior attempt — skipping")
+                return "duplicate_completed"
             }
         } catch (redisErr) {
-            // If Redis is unavailable we CANNOT guarantee idempotency.
-            // Fail-closed: rethrow so BullMQ retries with backoff rather than
-            // silently processing a potentially duplicate event.
-            log.error({ err: redisErr, eventId, event }, "Cannot acquire idempotency lock — failing job for retry")
+            // Cannot confirm whether this event already ran — fail-closed.
+            log.error({ err: redisErr, eventId, event }, "Cannot check idempotency key — failing job for retry")
             throw redisErr
         }
 
@@ -57,38 +59,49 @@ export function createRazorpayProcessor(container: any) {
         const paymentEntity = payload?.payment?.entity as Record<string, any> | undefined
         const refundEntity  = payload?.refund?.entity  as Record<string, any> | undefined
 
-        switch (event) {
-            case "payment.authorized":
-                log.info(
-                    { paymentId: paymentEntity?.id, amount: paymentEntity?.amount },
-                    "Payment authorized — medusa-plugin-razorpay-v2 handles capture"
-                )
-                break
+        try {
+            switch (event) {
+                case "payment.authorized":
+                    log.info(
+                        { paymentId: paymentEntity?.id, amount: paymentEntity?.amount },
+                        "Payment authorized — medusa-plugin-razorpay-v2 handles capture"
+                    )
+                    break
 
-            case "payment.captured":
-                log.info(
-                    { paymentId: paymentEntity?.id, orderId: paymentEntity?.order_id },
-                    "Payment captured — fulfillment triggered by order.placed subscriber"
-                )
-                break
+                case "payment.captured":
+                    log.info(
+                        { paymentId: paymentEntity?.id, orderId: paymentEntity?.order_id },
+                        "Payment captured — fulfillment triggered by order.placed subscriber"
+                    )
+                    break
 
-            case "payment.failed":
-                log.warn(
-                    {
-                        paymentId: paymentEntity?.id,
-                        errorCode: paymentEntity?.error_code,
-                        errorDescription: paymentEntity?.error_description,
-                    },
-                    "Payment failed — customer notified by Razorpay UI; no backend action"
-                )
-                break
+                case "payment.failed":
+                    log.warn(
+                        {
+                            paymentId: paymentEntity?.id,
+                            errorCode: paymentEntity?.error_code,
+                            errorDescription: paymentEntity?.error_description,
+                        },
+                        "Payment failed — customer notified by Razorpay UI; no backend action"
+                    )
+                    break
 
-            case "refund.processed":
-                await handleRefundProcessed(container, { refundEntity, paymentEntity })
-                break
+                case "refund.processed":
+                    await handleRefundProcessed(container, { refundEntity, paymentEntity })
+                    break
 
-            default:
-                log.info({ event }, "Unhandled Razorpay event type — acknowledged but not processed")
+                default:
+                    log.info({ event }, "Unhandled Razorpay event type — acknowledged but not processed")
+            }
+
+            // ── Mark successful completion ────────────────────────────────
+            // Only written AFTER all processing succeeds. Any throw above skips
+            // this line → key stays absent → BullMQ retry runs the full handler.
+            await redis.set(idempotencyKey, "1", "EX", String(IDEMPOTENCY_TTL_SECS))
+        } catch (err) {
+            // Idempotency key was not written — BullMQ will retry this job.
+            log.error({ err, eventId, event }, "Job processing failed — retry will re-run the full handler")
+            throw err
         }
 
         return "processed"
@@ -121,36 +134,23 @@ async function handleRefundProcessed(
         return
     }
 
-    const query = container.resolve(ContainerRegistrationKeys.QUERY)
+    // ── Look up Medusa payment by Razorpay payment ID (single JSONB query) ─
+    // Replaces an O(N/100) pagination loop with one SQL query. The payment.data
+    // column is JSONB; we probe both key names used by the Razorpay plugin:
+    // 'id' (set directly) and 'razorpay_payment_id' (set by some plugin versions).
+    // Workspace rules permit raw SQL for performance-critical reads.
+    const em: any = container.resolve("manager")
+    const rows: Array<{ id: string; payment_collection_id: string }> = await em.execute(
+        `SELECT id, payment_collection_id
+         FROM payment
+         WHERE provider_id LIKE '%razorpay%'
+           AND (data->>'id' = ? OR data->>'razorpay_payment_id' = ?)
+           AND created_at > NOW() - INTERVAL '180 days'
+         LIMIT 1`,
+        [razorpayPaymentId, razorpayPaymentId]
+    )
 
-    // ── Look up Medusa payment by Razorpay payment ID ─────────────────────
-    const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
-    const PAGE_SIZE    = 100
-    let   skip         = 0
-    let   matchedPayment: Record<string, any> | undefined
-
-    while (!matchedPayment) {
-        const { data: payments } = await query.graph({
-            entity: "payment",
-            fields: ["id", "payment_collection_id", "data"],
-            filters: {
-                provider_id: "pp_razorpay_razorpay",
-                created_at: { $gte: sixMonthsAgo },
-            } as any,
-            pagination: { take: PAGE_SIZE, skip },
-        })
-
-        if (!payments || payments.length === 0) break
-
-        matchedPayment = payments.find(
-            (p: any) =>
-                p?.data?.id === razorpayPaymentId ||
-                p?.data?.razorpay_payment_id === razorpayPaymentId
-        )
-
-        if (payments.length < PAGE_SIZE) break
-        skip += PAGE_SIZE
-    }
+    const matchedPayment = rows[0]
 
     if (!matchedPayment) {
         log.warn(
@@ -160,6 +160,7 @@ async function handleRefundProcessed(
         return
     }
 
+    const query = container.resolve(ContainerRegistrationKeys.QUERY)
     // ── Find the order via payment_collection → order link ─────────────────
     const { data: collections } = await query.graph({
         entity: "payment_collection",

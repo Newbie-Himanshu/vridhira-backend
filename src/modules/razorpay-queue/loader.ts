@@ -56,7 +56,7 @@ export async function razorpayQueueLoader(
     })
 
     worker.on("completed", (job, result) => {
-        if (result !== "duplicate") {
+        if (result !== "duplicate_completed") {
             log.info({ jobId: job.id, event: job.data.event, result }, "Razorpay job completed")
         }
     })
