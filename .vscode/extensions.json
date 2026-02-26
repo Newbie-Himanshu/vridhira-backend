@@ -1,0 +1,68 @@
+{
+  "recommendations": [
+    // ── Security & Audit ─────────────────────────────────────
+    
+    // GitHub Advanced Security — secret scanning, code scanning
+    "github.vscode-github-actions",
+    
+    // Snyk Security — scans code + dependencies for vulnerabilities
+    "snyk-security.snyk-vulnerability-scanner",
+    
+    // SonarLint — real-time security and code quality analysis
+    "sonarsource.sonarlint-vscode",
+    
+    // ESLint — runs our .eslintrc-security.json rules in-editor
+    "dbaeumer.vscode-eslint",
+    
+    // GitLens — see who wrote what (accountability for security changes)
+    "eamodio.gitlens",
+
+    // ── Secrets & Credential Detection ───────────────────────
+    
+    // Detect secrets in staged changes before commit
+    "nikeee.secret-finder",
+    
+    // .env file support with variable highlighting
+    "mikestead.dotenv",
+
+    // ── Code Quality ─────────────────────────────────────────
+    
+    // TypeScript — enhanced language support
+    "ms-vscode.vscode-typescript-next",
+    
+    // Error Lens — shows ESLint errors inline in the code
+    "usernamehw.errorlens",
+    
+    // Prettier — consistent code formatting
+    "esbenp.prettier-vscode",
+
+    // ── Git & GitHub ─────────────────────────────────────────
+    
+    // GitHub Pull Requests and Issues
+    "github.vscode-pull-request-github",
+    
+    // GitHub Copilot — AI pair programmer with our agent instructions
+    "github.copilot",
+    
+    // GitHub Copilot Chat — for running our security audit agents
+    "github.copilot-chat",
+    
+    // Conventional Commits — enforces our commit message format
+    "vivaxy.vscode-conventional-commits",
+
+    // ── Database & Environment ────────────────────────────────
+    
+    // PostgreSQL explorer
+    "mtxr.sqltools",
+    
+    // Redis explorer
+    "cweijan.vscode-redis-client",
+    
+    // REST API testing (test webhook endpoints locally)
+    "humao.rest-client"
+  ],
+
+  "unwantedRecommendations": [
+    // These tools have known issues with false positives for our stack
+  ]
+}

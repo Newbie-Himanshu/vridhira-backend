@@ -1,0 +1,300 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+
+    // ─────────────────────────────────────────────────────────
+    //  SECURITY PENTEST TASKS
+    // ─────────────────────────────────────────────────────────
+
+    {
+      "label": "🔴 Security: Full Audit",
+      "type": "shell",
+      "command": "yarn security:audit",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Runs all security checks: yarn audit, ESLint security rules, and secret scanning"
+    },
+
+    {
+      "label": "🔴 Security: yarn Vulnerability Audit",
+      "type": "shell",
+      "command": "yarn audit --audit-level=moderate --json | tee .security/yarn-audit-$(date +%Y%m%d).json && yarn audit --audit-level=moderate",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Checks all yarn dependencies for known CVEs. Saves report to .security/"
+    },
+
+    {
+      "label": "🔴 Security: Scan for Hardcoded Secrets",
+      "type": "shell",
+      "command": "yarn secretlint '**/*' --secretlintignore .secretlintignore 2>&1 | tee .security/secrets-scan-$(date +%Y%m%d).txt",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Scans all files for accidentally committed secrets, API keys, passwords"
+    },
+
+    {
+      "label": "🔴 Security: ESLint Security Rules",
+      "type": "shell",
+      "command": "yarn eslint src/ --config .eslintrc-security.js --format json | tee .security/eslint-security-$(date +%Y%m%d).json && yarn eslint src/ --config .eslintrc-security.js",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": ["$eslint-stylish"],
+      "detail": "Runs ESLint with security-focused rules (no-eval, timing-safe, etc.)"
+    },
+
+    {
+      "label": "🔴 Security: Check for Math.random() in Security Paths",
+      "type": "shell",
+      "command": "grep -rn 'Math.random' src/ --include='*.ts' && echo '❌ Math.random found — replace with crypto.randomInt' || echo '✅ No Math.random in source'",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Finds unsafe Math.random() usage that should be crypto.randomInt()"
+    },
+
+    {
+      "label": "🔴 Security: Check for customer_id in Request Body/Query",
+      "type": "shell",
+      "command": "grep -rn 'req\\.body\\.customer_id\\|req\\.query\\.customer_id\\|req\\.params\\.customer_id' src/ --include='*.ts' && echo '❌ IDOR risk: customer_id from request — use auth_context.actor_id' || echo '✅ No IDOR patterns found'",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Detects IDOR vulnerability pattern: customer_id should never come from request"
+    },
+
+    {
+      "label": "🔴 Security: Check for Unsafe Comparisons",
+      "type": "shell",
+      "command": "grep -rn 'signature\\s*===\\|token\\s*===\\|secret\\s*===\\|hash\\s*===' src/ --include='*.ts' && echo '❌ Timing-unsafe comparison found — use crypto.timingSafeEqual' || echo '✅ No unsafe comparisons found'",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Detects timing-unsafe secret comparisons (=== instead of timingSafeEqual)"
+    },
+
+    {
+      "label": "🔴 Security: Check for console.log with Sensitive Data",
+      "type": "shell",
+      "command": "grep -rn 'console\\.log.*\\(key\\|secret\\|token\\|password\\|otp\\|hash\\|salt\\)' src/ --include='*.ts' -i && echo '❌ Sensitive data in logs' || echo '✅ No sensitive data logged'",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Finds console.log statements that might leak secrets"
+    },
+
+    {
+      "label": "🔴 Security: Check Webhook Fail-Closed",
+      "type": "shell",
+      "command": "echo 'Checking webhook fail-closed patterns...' && grep -rn 'WEBHOOK_TOKEN\\|WEBHOOK_SECRET\\|RAZORPAY_WEBHOOK' src/api/hooks/ --include='*.ts' | grep -v 'if.*!' && echo '⚠️  Review webhook guard logic above' || echo '✅ Webhook guards appear fail-closed'",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Verifies webhooks reject requests when secrets are not configured"
+    },
+
+    // ─────────────────────────────────────────────────────────
+    //  AUDIT TASKS
+    // ─────────────────────────────────────────────────────────
+
+    {
+      "label": "🟡 Audit: TypeScript Strict Check",
+      "type": "shell",
+      "command": "yarn tsc --noEmit --strict 2>&1 | tee .security/tsc-$(date +%Y%m%d).txt",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": ["$tsc"],
+      "detail": "TypeScript strict mode check — catches type errors that can hide security issues"
+    },
+
+    {
+      "label": "🟡 Audit: Check Paginated Queries for Missing Limits",
+      "type": "shell",
+      "command": "grep -rn 'query\\.graph\\|findMany\\|findAndCount' src/ --include='*.ts' | grep -v 'take:' | grep -v '// no limit' && echo '⚠️  Queries without take: limit found — potential DoS vector' || echo '✅ All queries appear to have limits'",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Finds database queries that might be missing pagination limits"
+    },
+
+    {
+      "label": "🟡 Audit: Check External API Error Handling",
+      "type": "shell",
+      "command": "grep -rn 'fetch\\|axios\\|got\\|request' src/ --include='*.ts' | grep -v 'try\\|catch\\|\\.catch' | grep -v '//' && echo '⚠️  External API calls may lack error handling' || echo '✅ API calls appear to have error handling'",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Checks external API calls are wrapped in try/catch"
+    },
+
+    {
+      "label": "🟡 Audit: BUGS.md Summary",
+      "type": "shell",
+      "command": "echo '=== BUGS.MD STATUS SUMMARY ===' && grep -E '^\\| \\*\\*Status\\*\\*' BUGS.md | sort | uniq -c | sort -rn",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": false
+      },
+      "problemMatcher": [],
+      "detail": "Quick summary of bug status counts from BUGS.md"
+    },
+
+    {
+      "label": "🟡 Audit: Check Rate Limiting on Auth Routes",
+      "type": "shell",
+      "command": "grep -rn 'emailpass\\|reset-password\\|update-password' src/api/ --include='*.ts' && echo '' && echo '--- Checking for rate limit middleware ---' && grep -rn 'rateLimit\\|rate_limit\\|rateLimiter' src/api/ --include='*.ts' || echo '⚠️  No rate limiting found on auth routes'",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Verifies auth endpoints have rate limiting applied"
+    },
+
+    // ─────────────────────────────────────────────────────────
+    //  GITHUB PUSH TASKS
+    // ─────────────────────────────────────────────────────────
+
+    {
+      "label": "🟢 Git: Pre-Push Safety Check",
+      "type": "shell",
+      "command": "echo '=== PRE-PUSH CHECKS ===' && yarn build && echo '✅ Build OK' && yarn tsc --noEmit && echo '✅ TypeScript OK' && yarn audit --audit-level=high && echo '✅ yarn audit OK' && yarn eslint src/ --quiet && echo '✅ ESLint OK' && grep -rn 'Math.random' src/ --include='*.ts' && echo '❌ Math.random found' || echo '✅ No Math.random' && grep -rn 'req\\.body\\.customer_id' src/ --include='*.ts' && echo '❌ IDOR risk found' || echo '✅ No IDOR patterns'",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Run ALL checks before pushing to GitHub. Fix any failures before pushing."
+    },
+
+    {
+      "label": "🟢 Git: Stage Security Fix",
+      "type": "shell",
+      "command": "git add -p && echo 'Review staged changes above. When ready, run: Git: Commit Security Fix'",
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Interactive staging for security fixes — review each chunk"
+    },
+
+    {
+      "label": "🟢 Git: Commit with Conventional Message",
+      "type": "shell",
+      "command": "bash -c 'echo \"Enter commit type (feat/fix/security/refactor/docs/test/chore): \" && read type && echo \"Enter scope (auth/cod/razorpay/shiprocket/orders/etc): \" && read scope && echo \"Enter description: \" && read desc && echo \"Enter bug ID (BUG-XXX or skip): \" && read bugid && git commit -m \"${type}(${scope}): ${desc}\" -m \"Fixes: ${bugid}\"'",
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      },
+      "problemMatcher": [],
+      "detail": "Interactive conventional commit message builder"
+    },
+
+    {
+      "label": "🟢 Git: Update BUGS.md After Fix",
+      "type": "shell",
+      "command": "bash -c 'echo \"Enter BUG ID (e.g. BUG-001): \" && read bugid && COMMIT=$(git rev-parse --short HEAD) && DATE=$(date +%Y-%m-%d) && sed -i \"s/\\| \\*\\*Status\\*\\* \\| 🔴 OPEN \\|/| **Status** | 🟢 FIXED |/\" BUGS.md && echo \"Updated ${bugid} to FIXED. Remember to manually add commit hash: ${COMMIT} and date: ${DATE} to the entry.\"'",
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": false
+      },
+      "problemMatcher": [],
+      "detail": "Marks a bug as FIXED in BUGS.md with current commit hash"
+    },
+
+    // ─────────────────────────────────────────────────────────
+    //  COMPOUND TASKS
+    // ─────────────────────────────────────────────────────────
+
+    {
+      "label": "🚀 Full Security Sweep (All Checks)",
+      "dependsOn": [
+        "🔴 Security: yarn Vulnerability Audit",
+        "🔴 Security: ESLint Security Rules",
+        "🔴 Security: Scan for Hardcoded Secrets",
+        "🔴 Security: Check for Math.random() in Security Paths",
+        "🔴 Security: Check for customer_id in Request Body/Query",
+        "🔴 Security: Check for Unsafe Comparisons",
+        "🟡 Audit: TypeScript Strict Check",
+        "🟡 Audit: Check Paginated Queries for Missing Limits"
+      ],
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "detail": "Runs the complete security test suite in sequence"
+    }
+
+  ]
+}

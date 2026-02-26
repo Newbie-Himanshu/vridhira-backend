@@ -1,0 +1,136 @@
+{
+  // ── Your Existing Settings ────────────────────────────────
+  "chat.tools.terminal.autoApprove": {
+    "yarn add": true,
+    "npx tsc": true,
+    "yarn tsc": true
+  },
+
+  // ── ESLint Security Integration ───────────────────────────
+  "eslint.validate": [
+    "javascript",
+    "typescript"
+  ],
+  "eslint.options": {
+    "configFile": ".eslintrc-security.js"
+  },
+  "eslint.run": "onSave",
+  "eslint.format.enable": true,
+
+  // Show ESLint errors inline — critical for catching security issues while coding
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+  // ── TypeScript Strict Mode ────────────────────────────────
+  "typescript.preferences.strictNullChecks": true,
+  "typescript.suggest.enabled": true,
+  "typescript.validate.enable": true,
+
+  // ── File Security ─────────────────────────────────────────
+
+  // Never auto-save — explicit saves trigger ESLint + security checks
+  "files.autoSave": "off",
+
+  // Exclude sensitive files from search/explorer
+  "files.exclude": {
+    ".env": true,
+    ".env.local": true,
+    ".env.production": true,
+    ".env.staging": true,
+    "**/.security/*.json": true
+  },
+
+  // Exclude .env from search so secrets don't show in search results
+  "search.exclude": {
+    "**/.env": true,
+    "**/.env.*": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.medusa": true
+  },
+
+  // ── Git Security ──────────────────────────────────────────
+
+  // Require confirmation before push
+  "git.confirmSync": true,
+  "git.enableCommitSigning": false,
+
+  // Show staged diff before commit
+  "git.showCommitInput": true,
+
+  // Don't auto-fetch — we want intentional pulls
+  "git.autofetch": false,
+
+  // ── GitHub Copilot Agent Config ───────────────────────────
+  "github.copilot.enable": {
+    "*": true,
+    "plaintext": false,
+    "markdown": true,
+    "scminput": false,
+    ".env": false,
+    ".env.*": false
+  },
+
+  // Copilot instructions file location
+  "github.copilot.chat.codeGeneration.instructions": [
+    {
+      "file": ".github/copilot-instructions.md"
+    }
+  ],
+
+  // ── SonarLint Integration ─────────────────────────────────
+  "sonarlint.rules": {
+    "typescript:S2245": { "level": "on" },
+    "typescript:S4790": { "level": "on" },
+    "typescript:S5042": { "level": "on" },
+    "typescript:S5247": { "level": "on" },
+    "typescript:S5693": { "level": "on" },
+    "typescript:S6096": { "level": "on" }
+  },
+
+  // ── Error Lens ────────────────────────────────────────────
+  "errorLens.enabledDiagnosticLevels": [
+    "error",
+    "warning",
+    "info"
+  ],
+  "errorLens.messageBackgroundMode": "message",
+
+  // ── Editor Security Warnings ──────────────────────────────
+  "editor.inlineSuggest.suppressSuggestions": false,
+
+  // Highlight dangerous patterns as errors
+  "editor.tokenColorCustomizations": {
+    "textMateRules": [
+      {
+        "name": "Deprecated/Dangerous APIs",
+        "scope": "entity.name.function.deprecated",
+        "settings": {
+          "foreground": "#ff0000",
+          "fontStyle": "strikethrough"
+        }
+      }
+    ]
+  },
+
+  // ── Terminal Security ─────────────────────────────────────
+  "terminal.integrated.env.linux": {
+    "NODE_OPTIONS": "--max-old-space-size=4096"
+  },
+
+  // ── REST Client (for webhook testing) ─────────────────────
+  "rest-client.environmentVariables": {
+    "local": {
+      "baseUrl": "http://localhost:9000",
+      "adminToken": "{{$dotenv ADMIN_TEST_TOKEN}}",
+      "customerToken": "{{$dotenv TEST_CUSTOMER_TOKEN}}",
+      "razorpayWebhookSecret": "{{$dotenv RAZORPAY_WEBHOOK_SECRET}}"
+    }
+  },
+
+  // ── Workspace Specific ────────────────────────────────────
+  "workbench.editor.enablePreview": false,
+  "explorer.confirmDragAndDrop": true,
+  "explorer.confirmDelete": true
+}

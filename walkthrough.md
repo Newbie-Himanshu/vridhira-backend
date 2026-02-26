@@ -1,0 +1,100 @@
+# Context: Shiprocket Integration Refactor (2026-02-20)
+
+## Overview
+Status: **Completed**  
+Focus: **Refactoring Shiprocket Integration for Data Consistency & Configurability**
+
+This document details the critical refactoring of the Shiprocket fulfillment integration. The changes were necessary to align with MedusaJS v2 architecture, specifically the Fulfillment Module standard, and to remove hardcoded values that made the integration fragile.
+
+---
+
+## 1. Architectural Change: Native Fulfillment Module
+
+### Problem
+Previously, the `order-placed` subscriber bypassed Medusa's internal state management by directly calling the `ShiprocketService` API class.
+*   **Result:** Shipments were created in Shiprocket, but Medusa's Order status remained "Unfulfilled". No `Fulfillment` record was created in the database.
+*   **Risk:** Inventory not tracked, customer status misleading, inability to process returns correctly.
+
+### Solution
+We refactored the subscriber to use the **Medusa Fulfillment Module Service**.
+
+**File:** `src/subscribers/order-placed.ts`
+```typescript
+// OLD (Fragile):
+// await shiprocketService.createOrder(payload)
+
+// NEW (Robust):
+await fulfillmentModuleService.createFulfillment({
+    provider_id: "shiprocket",
+    delivery_address: order.shipping_address,
+    items: convertItems(order.items),
+    order: order // Context for provider
+})
+```
+
+### Citations & Research
+1.  **MedusaJS Fulfillment Module Service**:
+    *   **Source:** [MedusaJS Docs - Fulfillment Module](https://docs.medusajs.com/resources/commerce-modules/fulfillment/create-fulfillment)
+    *   **Concept:** `createFulfillment` is the standardized method to create a fulfillment. It handles the database transaction (updating Order status, creating Fulfillment record) and *then* delegates the logistics logic to the registered `FulfillmentProvider` (Shiprocket).
+
+2.  **Subscriber Pattern**:
+    *   **Source:** [MedusaJS Docs - Subscribers](https://docs.medusajs.com/resources/events-reference)
+    *   **Concept:** Using `order.placed` event to trigger fulfillment is the correct asynchronous pattern, but it must interact with the Module Service, not raw API services, to maintain data integrity.
+
+---
+
+## 2. Code Quality: Shared Logic
+
+### Problem
+Multiple files (`order-placed.ts` and `service.ts`) contained duplicate logic to calculate shipment dimensions and weight from product metadata.
+
+### Solution
+Extracted a shared utility function `resolveShipmentDimensions`.
+
+**File:** `src/lib/util/shiprocket.ts`
+*   **Logic:** Iterates through items, checks for `metadata.shiprocket_length/breadth/height`, and calculates total volumetric weight.
+*   **Defaulting:** Falls back to `15x12x10 cm` and `0.5 kg` if metadata is missing (standard e-commerce box size).
+
+### Citations
+*   **Shiprocket API - Create Order**:
+    *   **Source:** [Shiprocket API Docs](https://apidocs.shiprocket.in/#2a7b8611-3965-4f40-8b1b-71579545465f)
+    *   **Requirement:** API requires `length`, `breadth`, `height`, and `weight` for accurate shipping rate calculation. Sending `0` or incorrect values leads to shipping discrepancies.
+
+---
+
+## 3. Configuration: Hardcoded Values
+
+### Problem
+Critical shipping parameters were hardcoded in the codebase:
+*   `pickup_postcode`: "110001" (Delhi GPO)
+*   `pickup_location`: "Primary"
+*   `billing_country`: "India"
+
+### Solution
+Introduced environment variables and dynamic mapping.
+
+**Files:** `src/services/shiprocket.ts`, `src/modules/shiprocket-fulfillment/service.ts`, `.env`
+
+| Parameter | Old Value | New Value / Source |
+| :--- | :--- | :--- |
+| `pickup_postcode` | "110001" | `process.env.SHIPROCKET_PICKUP_POSTCODE` |
+| `pickup_location` | "Primary" | `process.env.SHIPROCKET_PICKUP_LOCATION` |
+| `billing_country` | "India" | `address.country_code` (e.g., "IN", "US") |
+
+### Citations
+*   **12-Factor App Methodology**:
+    *   **Source:** [12factor.net/config](https://12factor.net/config)
+    *   **Principle:** Store config in the environment. Hardcoded values require code deploys to change; env vars can be changed at runtime/deployment level.
+*   **Shiprocket Pickup Locations**:
+    *   **Source:** [Shiprocket Dashboard - Pickup Address](https://app.shiprocket.in/company-pickup-location-details)
+    *   **Constraint:** The `pickup_location` string sent to the API *must* match exactly a location configured in the Shiprocket dashboard. Mismatches cause API errors.
+
+---
+
+## 4. Summary of Modified Files
+
+*   **`src/subscribers/order-placed.ts`**: Refactored to use `fulfillmentModuleService`.
+*   **`src/lib/util/shiprocket.ts`**: **[NEW]** Shared dimension calculation logic.
+*   **`src/modules/shiprocket-fulfillment/service.ts`**: Updated to use shared utility and env vars.
+*   **`src/services/shiprocket.ts`**: Updated to use `SHIPROCKET_PICKUP_POSTCODE`.
+*   **`.env`**: Added new configuration keys.

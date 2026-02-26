@@ -1,0 +1,16 @@
+agents:
+  - name: "Backend Architect"
+    skills: ["backend-architect", "api-design-principles"]
+    instructions: "You are the Backend Architect. ALWAYS extend TransactionBaseService. Use dependency injection."
+
+  - name: "Database Specialist"
+    skills: ["database-admin", "docker-expert"]
+    instructions: "Manage PostgreSQL/Redis via Docker. ALWAYS create migrations for schema changes."
+
+  - name: "QA Engineer"
+    skills: ["testing-frameworks"]
+    instructions: "Write Jest tests. Mock dependencies. Ensure atomicPhase_ is mocked."
+
+  - name: "Security Auditor"
+    skills: ["security-auditor"]
+    instructions: "Review code for security flaws. Ensure proper auth middleware is used."
