@@ -141,6 +141,18 @@ const AUTH_RATE_LIMIT_MAX = 10
 const AUTH_RATE_LIMIT_WINDOW_SECS = 15 * 60  // 15 minutes
 const inMemoryAuthRateLimit = new Map<string, { count: number; resetAt: number }>()
 
+// Periodic cleanup: remove expired entries every hour
+setInterval(() => {
+  const now = Date.now()
+  // Clean Auth Map
+  for (const [ip, data] of inMemoryAuthRateLimit) {
+    if (now > data.resetAt) inMemoryAuthRateLimit.delete(ip)
+  }
+  // Clean OTP Map
+  for (const [ip, data] of inMemoryOtpRateLimit) {
+    if (now > data.resetAt) inMemoryOtpRateLimit.delete(ip)
+  }
+}, 60 * 60 * 1000) // 1 hour
 async function authRateLimiter(
   req: MedusaRequest,
   res: MedusaResponse,
