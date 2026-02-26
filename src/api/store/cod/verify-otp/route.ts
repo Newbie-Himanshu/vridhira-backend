@@ -1,6 +1,7 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules, ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import CodPaymentService, { MAX_OTP_ATTEMPTS } from "../../../../modules/cod-payment/service"
+import { getRedisClient } from "../../../../lib/redis-client"
 import logger from "../../../../lib/logger"
 
 const log = logger.child({ module: "cod-verify-otp" })
@@ -115,11 +116,46 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
         const sessionData = (paymentSession.data ?? {}) as Record<string, unknown>
 
-        // ── 3. Brute-force lockout check ──────────────────────────────────
-        // Attempt count is stored in the payment session so it survives across
-        // requests. This prevents parallel or rapid sequential attempts.
-        const attempts = Number(sessionData.otp_attempts ?? 0)
-        if (attempts >= MAX_OTP_ATTEMPTS) {
+        // ── 3. Brute-force lockout — atomic Redis INCR (BUG FIX: TOCTOU race) ────
+        // Problem: the previous implementation read otp_attempts from the payment session
+        // and wrote it back after each failed attempt. Two concurrent requests could both
+        // read the same count (e.g. 2), both compute 3, and each write 3 — effectively
+        // allowing up to 2× MAX_OTP_ATTEMPTS before lockout (classic read-modify-write race).
+        //
+        // Fix: INCR first, THEN check the result. Redis INCR is atomic — two concurrent
+        // requests always get different counter values. The Lua script also sets a TTL on
+        // the first use so a crash between INCR and EXPIRE cannot leave a permanent key.
+        //
+        // Fallback: if Redis is unavailable, fall back to session-data counter (existing
+        // non-atomic behaviour) so a Redis outage never blocks legitimate customers.
+        const OTP_ATTEMPT_INCR_LUA = `
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+`
+        const OTP_ATTEMPT_TTL_SECS = 600  // 10 min — matches default OTP expiry
+        const attemptCountKey = `cod:otp:attempts:${payment_session_id}`
+
+        let attemptNumber: number
+        let usingRedisCounter = false
+
+        try {
+            const redis = getRedisClient()
+            const count = await (redis as any).eval(
+                OTP_ATTEMPT_INCR_LUA, 1, attemptCountKey, String(OTP_ATTEMPT_TTL_SECS)
+            ) as number
+            attemptNumber     = count
+            usingRedisCounter = true
+        } catch {
+            // Redis unavailable — fall back to session-data counter (non-atomic, existing behaviour)
+            attemptNumber = Number(sessionData.otp_attempts ?? 0) + 1
+        }
+
+        // With INCR-first: customer gets exactly MAX_OTP_ATTEMPTS tries (1..MAX are allowed).
+        // On attempt MAX+1, this check fires and the customer is locked out.
+        if (attemptNumber > MAX_OTP_ATTEMPTS) {
             return res.status(429).json({
                 error: "Too many failed OTP attempts. Please restart checkout to receive a new code.",
                 locked: true,
@@ -140,24 +176,27 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
             const result = await codService.verifyOtp(sessionData, otp)
             updatedData = result.updatedData
         } catch (verifyError: any) {
-            // Verification failed — increment attempt counter and persist it
-            // so the next request also sees the updated attempt count.
-            const newAttempts = attempts + 1
-            const lockedData = { ...sessionData, otp_attempts: newAttempts }
+            // OTP verification failed.
+            // - Redis counter path: already incremented atomically before the OTP check.
+            //   No further DB write needed — Redis is authoritative.
+            // - Session-data fallback (Redis unavailable): must write the incremented count
+            //   so the next request sees the updated value in its own fallback check.
+            if (!usingRedisCounter) {
+                try {
+                    await paymentModule.updatePaymentSession({
+                        id: payment_session_id,
+                        data: { ...sessionData, otp_attempts: attemptNumber },
+                    })
+                } catch (persistErr) {
+                    log.error({ err: persistErr, session_id: payment_session_id }, "Failed to persist OTP attempt counter")
+                    return res.status(500).json({ error: "OTP verification failed — could not update attempt counter" })
+                }
+            }
 
-            // Persist the attempt counter — do NOT swallow errors here.
-            // If we can't write the counter to the DB, we cannot guarantee that
-            // brute-force protection is active; returning a 500 is safer than
-            // reporting a wrong-OTP response with an untracked attempt.
-            await paymentModule.updatePaymentSession({
-                id: payment_session_id,
-                data: lockedData,
-            })
-
-            const remaining = MAX_OTP_ATTEMPTS - newAttempts
+            const remaining = MAX_OTP_ATTEMPTS - attemptNumber
             const isMedusaError = verifyError?.name === "MedusaError" || verifyError?.type
 
-            if (newAttempts >= MAX_OTP_ATTEMPTS) {
+            if (attemptNumber >= MAX_OTP_ATTEMPTS) {
                 return res.status(429).json({
                     error: "Too many failed OTP attempts. Please restart checkout to receive a new code.",
                     locked: true,
@@ -175,6 +214,18 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
             id: payment_session_id,
             data: updatedData,
         })
+
+        // Clear the Redis attempt counter on success — the session is now verified
+        // and the counter is no longer needed. If Redis is unavailable, the key will
+        // auto-expire after OTP_ATTEMPT_TTL_SECS anyway.
+        if (usingRedisCounter) {
+            try {
+                const redis = getRedisClient()
+                await redis.del(attemptCountKey)
+            } catch {
+                // best-effort — key will auto-expire after 10 min
+            }
+        }
 
         log.info({ session_id: payment_session_id }, "COD OTP successfully verified")
 
