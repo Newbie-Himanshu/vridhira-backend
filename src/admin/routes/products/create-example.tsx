@@ -14,7 +14,7 @@ import {
   Input,
   Label,
   Text,
-  TextArea,
+  Textarea,
   toast,
 } from "@medusajs/ui"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -127,7 +127,7 @@ const CreateProductPage = () => {
         {/* Description */}
         <div>
           <Label htmlFor="description">Description</Label>
-          <TextArea
+          <Textarea
             id="description"
             placeholder="Product description..."
             value={formData.description}

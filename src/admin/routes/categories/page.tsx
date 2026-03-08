@@ -8,7 +8,7 @@ import {
   Text,
   toast,
   FocusModal,
-  TextArea,
+  Textarea,
   Badge,
   IconButton,
   Tooltip,
@@ -437,7 +437,7 @@ const CategoryManagementPage = () => {
 
             <div>
               <Label>Description</Label>
-              <TextArea
+              <Textarea
                 placeholder="Add a description for this category..."
                 value={formData.description}
                 onChange={(e) =>
