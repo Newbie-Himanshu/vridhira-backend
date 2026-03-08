@@ -105,6 +105,33 @@ Desktop.ini
 meili_data/
 data.ms/
 
+# ── Reference Documentation (Development Only) ────────────────────────────────
+# These are internal guides and reference docs, not needed in production
+ADMIN_QUICK_START.md
+ADMIN_CATEGORY_INTEGRATION_GUIDE.md
+CATEGORY_HIERARCHY_GUIDE.md
+MASTER_DOCUMENTATION.md
+IMPLEMENTATION_CHECKLIST.md
+MEDUSA_V2_COMMANDS.md
+README_CATEGORY_SYSTEM.md
+COMPLETE_FILES_CREATED.md
+CATEGORY_SYSTEM_SUMMARY.md
+FAQ_API_GUIDE.md
+AI_WORKFLOW.md
+commit-category-system.sh
+
+# ── Generated Reference Files ──────────────────────────────────────────────────
+*.json.bak
+*-reference.md
+create-*.sh
+FAQ_ARTICLES_138.json
+
+# ── Build Output & Diagnostics ────────────────────────────────────────────────
+# TypeScript compilation output and diagnostic files
+tsc-errors.txt
+tsc-out.txt
+tsc-out-new.txt
+
 # ── Misc ──────────────────────────────────────────────────────────────────────
 *.pem
 *.key
