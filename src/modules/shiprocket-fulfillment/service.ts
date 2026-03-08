@@ -14,6 +14,7 @@ import {
 import ShiprocketService from "../../services/shiprocket"
 import { resolveShipmentDimensions } from "../../lib/util/shiprocket"
 import { retryWithBackoff } from "../../lib/util/retry"
+import { SHIPPING_CONFIG_MODULE } from "../shipping-config"
 
 /**
  * Maps Medusa ISO 3166-1 alpha-2 country codes → Shiprocket full country name.
@@ -67,6 +68,7 @@ class ShiprocketFulfillmentService extends AbstractFulfillmentProviderService {
 
     protected shiprocketService_: ShiprocketService
     protected productModuleService_: IProductModuleService
+    protected shippingConfigService_: any
 
     constructor(
         container: Record<string, any>,
@@ -77,6 +79,7 @@ class ShiprocketFulfillmentService extends AbstractFulfillmentProviderService {
         // Injected by Medusa's IoC container — used to enrich FulfillmentItemDTOs
         // with product metadata for accurate shipment dimensions.
         this.productModuleService_ = container[Modules.PRODUCT]
+        this.shippingConfigService_ = container[SHIPPING_CONFIG_MODULE]
     }
 
     async getFulfillmentOptions(): Promise<FulfillmentOption[]> {
@@ -139,20 +142,72 @@ class ShiprocketFulfillmentService extends AbstractFulfillmentProviderService {
                 )
             }
 
-            // Select the cheapest rate
-            const cheapestRate = rates[0]
-            const amount = Math.ceil(cheapestRate.rate * 100)
+            // Standard = cheapest courier; Express = fastest (fewest estimated days)
+            const isExpress = (optionData?.id as string)?.includes("express")
+            const selectedRate = isExpress
+                ? rates.slice().sort((a: any, b: any) => (a.estimated_days ?? 99) - (b.estimated_days ?? 99))[0]
+                : rates[0]
+
+            // Load admin-configurable markup settings
+            const cfgs = await this.shippingConfigService_
+                .listShippingConfigs({}, { take: 1 })
+                .catch(() => [])
+            const cfg = cfgs[0] ?? {
+                enabled: true,
+                surcharge_percent: 0,
+                handling_fee: 0,
+                free_shipping_threshold: 0,
+                fallback_rate: 99,
+                express_surcharge_percent: 0,
+                express_handling_fee: 0,
+                express_fallback_rate: 149,
+                express_free_shipping_threshold: 0,
+            }
+
+            // Medusa cart subtotal is in paise — convert to rupees for the formula
+            const subtotalRupees = (cart.subtotal ?? 0) / 100
+
+            const freeThreshold = isExpress
+                ? cfg.express_free_shipping_threshold
+                : cfg.free_shipping_threshold
+
+            // Free shipping threshold
+            if (freeThreshold > 0 && subtotalRupees >= freeThreshold) {
+                return { calculated_amount: 0, is_calculated_price_tax_inclusive: false }
+            }
+
+            const surchargePercent = isExpress ? cfg.express_surcharge_percent : cfg.surcharge_percent
+            const handlingFee      = isExpress ? cfg.express_handling_fee      : cfg.handling_fee
+
+            const surcharge  = cfg.enabled ? Math.round(subtotalRupees * (surchargePercent / 100)) : 0
+            const handling   = cfg.enabled ? handlingFee : 0
+            const totalRupees = selectedRate.rate + surcharge + handling
 
             return {
-                calculated_amount: amount,
+                calculated_amount: Math.ceil(totalRupees * 100), // back to paise
                 is_calculated_price_tax_inclusive: false,
             }
         } catch (e) {
             console.error("Shiprocket rate calculation failed:", e)
-            throw new MedusaError(
-                MedusaError.Types.UNEXPECTED_STATE,
-                "Could not calculate shipping rate via Shiprocket"
-            )
+            // Try to use admin fallback rate before throwing
+            try {
+                const cfgs = await this.shippingConfigService_
+                    .listShippingConfigs({}, { take: 1 })
+                    .catch(() => [])
+                const isExpress = (optionData?.id as string)?.includes("express")
+                const fallbackRupees = isExpress
+                    ? (cfgs[0]?.express_fallback_rate ?? 149)
+                    : (cfgs[0]?.fallback_rate ?? 99)
+                return {
+                    calculated_amount: Math.ceil(fallbackRupees * 100),
+                    is_calculated_price_tax_inclusive: false,
+                }
+            } catch {
+                throw new MedusaError(
+                    MedusaError.Types.UNEXPECTED_STATE,
+                    "Could not calculate shipping rate via Shiprocket"
+                )
+            }
         }
     }
 
