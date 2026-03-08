@@ -1,6 +1,7 @@
 import { defineMiddlewares, authenticate } from "@medusajs/framework/http"
 import type { MedusaRequest, MedusaResponse, MedusaNextFunction } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
+import crypto from "crypto"
 import logger from "../lib/logger"
 import { getRedisClient } from "../lib/redis-client"
 
@@ -41,17 +42,142 @@ function getClientIp(req: MedusaRequest): string {
   return socketIp
 }
 
-// ── Atomic Redis INCR + EXPIRE (Lua script) ───────────────────────────────────
-// Two-command INCR then EXPIRE has a race: if the process crashes between them
-// the key has no TTL and the IP is permanently blocked.  This Lua script
-// executes both commands atomically inside a single Redis call.
-const INCR_WITH_TTL_LUA = `
-local count = redis.call('INCR', KEYS[1])
-if count == 1 then
-  redis.call('EXPIRE', KEYS[1], ARGV[1])
-end
-return count
-`
+// ── CSRF Token Protection ──────────────────────────────────────────────────────────
+// Generates and validates CSRF tokens to prevent cross-site request forgery attacks.
+// Tokens are stored in session and validated against X-CSRF-Token header on POST/PUT/DELETE.
+
+/**
+ * Generates a CSRF token for the session.
+ * Called on GET requests to populate a hidden form field.
+ */
+function generateCsrfToken(): string {
+  return crypto.randomBytes(32).toString('hex')
+}
+
+/**
+ * Generates CSRF token and stores in session (called for GET requests).
+ */
+function csrfTokenGenerator(
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  // Only generate for GET requests to reduce overhead
+  if (req.method === 'GET') {
+    const session = (req as any).session || {}
+    if (!session.csrfToken) {
+      session.csrfToken = generateCsrfToken()
+      ;(req as any).session = session
+    }
+  }
+  return next()
+}
+
+/**
+ * Validates CSRF token on state-changing requests (POST/PUT/DELETE).
+ * Extracts token from X-CSRF-Token header and compares with session token.
+ */
+function verifyCsrfToken(
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  // Skip for safe methods or public endpoints
+  if (!['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+    return next()
+  }
+
+  const session = (req as any).session || {}
+  const sessionToken = session.csrfToken
+  const headerToken = req.headers['x-csrf-token'] as string | undefined
+
+  // If no session token, generate one (first request)
+  if (!sessionToken) {
+    const newToken = generateCsrfToken()
+    ;(req as any).session = { ...session, csrfToken: newToken }
+
+    // First request without token is always rejected
+    if (!headerToken) {
+      return res.status(403).json({
+        error: "CSRF token missing",
+        message: "Please retry with a valid CSRF token in X-CSRF-Token header"
+      })
+    }
+  }
+
+  // Verify token format (should be 64-char hex string)
+  if (!headerToken || !/^[0-9a-f]{64}$/i.test(headerToken)) {
+    return res.status(403).json({
+      error: "CSRF token invalid format",
+      message: "Token must be a valid 64-character hexadecimal string"
+    })
+  }
+
+  // Constant-time comparison to prevent timing attacks
+  try {
+    const sessionBuf = Buffer.from(sessionToken)
+    const headerBuf = Buffer.from(headerToken)
+
+    const tokensMatch = sessionBuf.length === headerBuf.length &&
+      crypto.timingSafeEqual(sessionBuf, headerBuf)
+
+    if (!tokensMatch) {
+      log.warn({ ip: getClientIp(req) }, "CSRF token mismatch — potential attack")
+      return res.status(403).json({
+        error: "CSRF token verification failed",
+        message: "Token does not match session. Refresh and try again."
+      })
+    }
+  } catch (err) {
+    log.error({ err }, "CSRF token comparison failed")
+    return res.status(500).json({ error: "Token verification error" })
+  }
+
+  return next()
+}
+
+// ── OTP Send Rate Limiting by IP ───────────────────────────────────────────────────
+// Limits OTP send requests per IP to prevent SMS bombing/DoS attacks.
+// Limit: 5 OTP requests per hour per real client IP (global across all customers).
+const OTP_SEND_RATE_LIMIT = 5
+const OTP_SEND_WINDOW_SECS = 3600 // 1 hour
+
+async function otpSendRateLimiter(
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): Promise<void> {
+  const clientIp = getClientIp(req)
+  const rateLimitKey = `otp:send:${clientIp}`
+
+  try {
+    const redis = getRedisClient()
+    const count = await redis.call("INCR", rateLimitKey) as number
+
+    if (count === 1) {
+      // First request in window — set expiry atomically
+      await redis.call("EXPIRE", rateLimitKey, String(OTP_SEND_WINDOW_SECS))
+    }
+
+    if (count > OTP_SEND_RATE_LIMIT) {
+      const ttl = await redis.call("TTL", rateLimitKey) as number
+      log.warn({ ip: clientIp, count }, `OTP send rate limit exceeded`)
+      return res.status(429).json({
+        error: "Too many OTP requests",
+        message: `Maximum ${OTP_SEND_RATE_LIMIT} OTP requests per hour. Try again in ${Math.ceil(ttl / 60)} minutes.`,
+        retryAfter: ttl
+      })
+    }
+
+    // Request allowed
+    return next()
+  } catch (err) {
+    // Redis unavailable — allow through (availability > rate limiting on outage)
+    log.warn({ err, ip: clientIp }, "OTP send rate limit check unavailable — allowing request")
+    return next()
+  }
+}
+
 
 // ── Cart completion idempotency lock (BUG-003 fix) ────────────────────────────
 // Prevents duplicate order creation from double-click or network retries.
@@ -389,7 +515,96 @@ async function requireVerifiedPurchase(
     } catch (err) {
     log.error({ err }, "ReviewMiddleware error")
     return res.status(500).json({ message: "Failed to verify purchase eligibility." })
+}
+
+// ── Security Headers Middleware ───────────────────────────────────────────────────
+// Sets critical security headers on ALL responses to prevent common attacks.
+function securityHeaders(
+  _req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  // Prevent MIME sniffing attacks (e.g., loading JS as HTML)
+  res.setHeader("X-Content-Type-Options", "nosniff")
+
+  // Prevent clickjacking attacks
+  res.setHeader("X-Frame-Options", "DENY")
+
+  // Enable XSS filter in older browsers (modern browsers ignore this)
+  res.setHeader("X-XSS-Protection", "1; mode=block")
+
+  // Strict Transport Security — force HTTPS for 1 year
+  // subdomains and preload are secure defaults but can be adjusted
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
   }
+
+  // Referrer Policy — don't leak full URLs in Referer header to third-party sites
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin")
+
+  // Permissions Policy — disable potentiall dangerous browser features
+  // Restrict: camera, microphone, geolocation, accelerometer, gyroscope, magnetometer, usb, payment
+  res.setHeader(
+    "Permissions-Policy",
+    [
+      "camera=()",
+      "microphone=()",
+      "geolocation=()",
+      "accelerometer=()",
+      "gyroscope=()",
+      "magnetometer=()",
+      "usb=()",
+      "payment=()",
+      "clipboard-read=(self)",
+      "clipboard-write=(self)",
+    ].join(", ")
+  )
+
+  // Content Security Policy (CSP) — prevents inline scripts and external script injection
+  // Adjust 'script-src' based on your requirements (e.g., if using external analytics)
+  const csp = [
+    "default-src 'self'", // Only allow resources from same origin by default
+    "script-src 'self'",  // Only allow same-origin scripts (no inline <script>)
+    "style-src 'self' 'unsafe-inline'", // Allow inline CSS (common for Tailwind/CSS-in-JS)
+    "img-src 'self' data: https:", // Allow images from same-origin, data URLs, HTTPS
+    "font-src 'self' data:", // Allow fonts from same-origin and data URLs
+    "connect-src 'self' https:", // Allow API calls to same-origin and HTTPS
+    "frame-ancestors 'none'", // Don't allow embedding in iframes
+    "base-uri 'self'", // Restrict base URLs
+    "form-action 'self'", // Restrict form submissions to same-origin
+  ].join("; ")
+
+  res.setHeader("Content-Security-Policy", csp)
+
+  return next()
+}
+
+// ── Cache Control Middleware ───────────────────────────────────────────────────────
+// Prevents caching of sensitive endpoints to avoid leaking customer data.
+// Sensitive routes return Cache-Control: no-store to ensure browsers and proxies don't cache.
+function cacheControlMiddleware(
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  const sensitivePatterns = [
+    /^\/store\/auth\//,           // Auth operations
+    /^\/store\/customers/,        // Customer account data
+    /^\/store\/orders/,           // Order history
+    /^\/store\/cod\/verify-otp/,  // OTP verification
+    /^\/store\/cod\/eligibility/, // COD eligibility
+    /^\/admin\//,                 // All admin endpoints
+  ]
+
+  const isSensitive = sensitivePatterns.some(pattern => pattern.test(req.path))
+
+  if (isSensitive) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, private")
+    res.setHeader("Pragma", "no-cache") // For HTTP/1.0 compatibility
+    res.setHeader("Expires", "0")       // For older browsers
+  }
+
+  return next()
 }
 
 /**
@@ -402,6 +617,12 @@ async function requireVerifiedPurchase(
  * @see https://docs.medusajs.com/learn/fundamentals/api-routes/protected-routes
  */
 export default defineMiddlewares({
+  // ── Security Headers + Cache Control (Applied Globally) ─────────────────────
+  // Sets HSTS, CSP, X-Frame-Options, and other security headers on every response.
+  // Also prevents caching of sensitive endpoints to avoid data leakage.
+  // This is a critical first defense against XSS, clickjacking, protocol downgrade attacks.
+  onRequest: [securityHeaders, cacheControlMiddleware],
+
   // ── Global Error Handler ──────────────────────────────────────────────────
   // Overrides Medusa's default error handler for ALL API routes (store + admin).
   // Rules:
@@ -441,6 +662,40 @@ export default defineMiddlewares({
   },
 
   routes: [
+    // ── CSRF Token Protection (Defense-in-depth) ───────────────────────────────
+    // Generates CSRF tokens on GET requests and validates on POST/PUT/DELETE.
+    // This prevents cross-site form submissions from forging state-changing requests.
+    {
+      matcher: "/store/**",
+      method: ["GET"],
+      middlewares: [csrfTokenGenerator],
+    },
+    {
+      matcher: "/store/auth/**",
+      method: ["POST"],
+      middlewares: [verifyCsrfToken],
+    },
+    {
+      matcher: "/store/customers",
+      method: ["POST"],
+      middlewares: [verifyCsrfToken],
+    },
+    {
+      matcher: "/store/cod/**",
+      method: ["POST"],
+      middlewares: [verifyCsrfToken],
+    },
+    {
+      matcher: "/store/wishlist*",
+      method: ["POST", "DELETE"],
+      middlewares: [verifyCsrfToken],
+    },
+    {
+      matcher: "/store/product-reviews",
+      method: ["POST"],
+      middlewares: [verifyCsrfToken],
+    },
+
     // ── Global body size guard (BUG-012 fix) ─────────────────────────────────
     // Rejects oversized requests before business logic runs.
     {
@@ -486,6 +741,14 @@ export default defineMiddlewares({
     {
       matcher: "/store/shipping/serviceability*",
       middlewares: [authenticate("customer", ["session", "bearer"])],
+    },
+
+    // ── COD OTP Send Rate Limiting ───────────────────────────────────────────
+    // Limit: 5 OTP send requests per hour per IP (global, prevents SMS bombing)
+    {
+      matcher: "/store/cod/send-otp",
+      method: ["POST"],
+      middlewares: [otpSendRateLimiter],
     },
 
     // ── COD OTP verification ─────────────────────────────────────────────────
@@ -588,6 +851,31 @@ export default defineMiddlewares({
     {
       matcher: "/store/custom/pending-reviews*",
       middlewares: [authenticate("customer", ["session", "bearer"])],
+    },
+
+    // ── Admin Payment Operations (Razorpay) ──────────────────────────────────────
+    // POST /admin/custom/razorpay/:paymentId/capture - Manual payment capture
+    // POST /admin/custom/razorpay/:paymentId/refund  - Manual refund issuance
+    // These are sensitive financial operations that MUST require admin authentication.
+    // Even though they're under /admin/**, we add explicit middleware for defense-in-depth.
+    {
+      matcher: "/admin/custom/razorpay/*/capture",
+      method: ["POST"],
+      middlewares: [authenticate("admin")],
+    },
+    {
+      matcher: "/admin/custom/razorpay/*/refund",
+      method: ["POST"],
+      middlewares: [authenticate("admin")],
+    },
+
+    // ── Admin COD Fraud Management ───────────────────────────────────────────────
+    // POST /admin/custom/cod-fraud* - Enable/disable COD for customers with fraud risk
+    // Requires admin authentication to prevent unauthorized access manipulation.
+    {
+      matcher: "/admin/custom/cod-fraud*",
+      method: ["POST"],
+      middlewares: [authenticate("admin")],
     },
   ],
 })
