@@ -2,7 +2,6 @@ import { useState } from "react"
 import {
   Button,
   Input,
-  Modal,
   Text,
   Badge,
   IconButton,

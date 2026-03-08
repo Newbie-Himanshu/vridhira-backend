@@ -7,7 +7,7 @@ import {
   Label,
   Text,
   toast,
-  Modal,
+  FocusModal,
   TextArea,
   Badge,
   IconButton,
@@ -397,19 +397,19 @@ const CategoryManagementPage = () => {
       </div>
 
       {/* Create/Edit Modal */}
-      <Modal open={showModal} onOpenChange={setShowModal}>
-        <Modal.Content>
-          <Modal.Header>
-            <Modal.Title>
+      <FocusModal open={showModal} onOpenChange={setShowModal}>
+        <FocusModal.Content>
+          <FocusModal.Header>
+            <FocusModal.Title>
               {modalMode === "create"
                 ? parentCategoryForCreate
                   ? `Add Subcategory to "${parentCategoryForCreate.name}"`
                   : "Add Root Category"
                 : `Edit "${selectedCategory?.name}"`}
-            </Modal.Title>
-          </Modal.Header>
+            </FocusModal.Title>
+          </FocusModal.Header>
 
-          <Modal.Body className="space-y-4">
+          <FocusModal.Body className="space-y-4">
             <div>
               <Label>Category Name *</Label>
               <Input
@@ -459,9 +459,9 @@ const CategoryManagementPage = () => {
                 )}
               </div>
             )}
-          </Modal.Body>
+          </FocusModal.Body>
 
-          <Modal.Footer>
+          <FocusModal.Footer>
             <Button
               variant="secondary"
               onClick={() => {
@@ -478,18 +478,18 @@ const CategoryManagementPage = () => {
             >
               {modalMode === "create" ? "Create Category" : "Update Category"}
             </Button>
-          </Modal.Footer>
-        </Modal.Content>
-      </Modal>
+          </FocusModal.Footer>
+        </FocusModal.Content>
+      </FocusModal>
 
       {/* Delete Confirmation Modal */}
-      <Modal open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <Modal.Content>
-          <Modal.Header>
-            <Modal.Title>Delete Category</Modal.Title>
-          </Modal.Header>
+      <FocusModal open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <FocusModal.Content>
+          <FocusModal.Header>
+            <FocusModal.Title>Delete Category</FocusModal.Title>
+          </FocusModal.Header>
 
-          <Modal.Body>
+          <FocusModal.Body>
             <div className="space-y-2">
               <Text>
                 Are you sure you want to delete this category? This action
@@ -505,9 +505,9 @@ const CategoryManagementPage = () => {
                 </Text>
               </div>
             </div>
-          </Modal.Body>
+          </FocusModal.Body>
 
-          <Modal.Footer>
+          <FocusModal.Footer>
             <Button
               variant="secondary"
               onClick={() => {
@@ -524,9 +524,9 @@ const CategoryManagementPage = () => {
             >
               Delete Category
             </Button>
-          </Modal.Footer>
-        </Modal.Content>
-      </Modal>
+          </FocusModal.Footer>
+        </FocusModal.Content>
+      </FocusModal>
     </Container>
   )
 }
