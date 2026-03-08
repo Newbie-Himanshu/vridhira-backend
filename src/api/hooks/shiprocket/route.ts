@@ -99,6 +99,45 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
             return res.status(401).json({ received: false, error: "Unauthorized" })
         }
 
+        // ── HMAC Signature Verification (Defense-in-depth) ──────────────────────
+        // CRITICAL: Verify HMAC signature to prevent webhook forgery even if token is leaked.
+        // Shiprocket webhook signature should be sent in X-Shiprocket-Signature header.
+        // If Shiprocket doesn't support this, request API token rotation as mitigation.
+        const webhookSecret = process.env.SHIPROCKET_WEBHOOK_SECRET
+        const receivedSignature = req.headers["x-shiprocket-signature"] as string | undefined
+
+        if (webhookSecret && receivedSignature) {
+            // HMAC signature verification is enabled
+            const rawBody = (req as any).rawBody || JSON.stringify(req.body)
+            const expectedSignature = crypto
+                .createHmac("sha256", webhookSecret)
+                .update(rawBody)
+                .digest("hex")
+
+            // Validate signature format before comparison
+            if (!/^[0-9a-fA-F]{64}$/.test(receivedSignature)) {
+                console.warn("[Shiprocket Webhook] Invalid signature format — rejected")
+                return res.status(401).json({ received: false, error: "Invalid signature format" })
+            }
+
+            // Constant-time comparison to prevent timing attacks
+            const isValidSignature = crypto.timingSafeEqual(
+                Buffer.from(receivedSignature),
+                Buffer.from(expectedSignature)
+            )
+
+            if (!isValidSignature) {
+                console.warn("[Shiprocket Webhook] HMAC signature verification failed — rejected")
+                return res.status(401).json({ received: false, error: "Signature verification failed" })
+            }
+
+            console.log("[Shiprocket Webhook] HMAC signature verified ✓")
+        } else if (webhookSecret && !receivedSignature) {
+            console.warn("[Shiprocket Webhook] Webhook secret configured but no signature received — token-only fallback")
+        } else if (!webhookSecret && process.env.NODE_ENV === "production") {
+            console.warn("[Shiprocket Webhook] SHIPROCKET_WEBHOOK_SECRET not configured in production — HMAC verification disabled. Please configure for defense-in-depth.")
+        }
+
         const {
             awb,
             current_status,
