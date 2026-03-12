@@ -35,12 +35,13 @@ For businesses and commercial deployments
 
 | Document | Purpose | For Whom |
 |---|---|---|
-| **LICENSE** | Primary license text — READ THIS FIRST | Everyone |
+| **LICENSE** | Main license text — READ THIS FIRST | Everyone |
 | **COMMUNITY-LICENSE.md** | Full free tier terms and conditions | Students & non-profits |
 | **COMMERCIAL-LICENSE.md** | Full commercial tier terms and pricing | Businesses & enterprises |
 | **COMMERCIAL-LICENSE-AGREEMENT.md** | Formal contract template for signature | Commercial users |
 | **PAYMENT-SCHEDULE.md** | Monthly payment terms and reporting | Commercial users |
 | **LICENSING-GUIDE.md** | FAQ, decision tree, examples | Everyone (decision help) |
+| **DEPENDENCIES.md** | Open-source credits & acknowledgments | Everyone (dependency info) |
 | **LICENSE-INDEX.md** | This file — navigation hub | Everyone |
 
 ---
