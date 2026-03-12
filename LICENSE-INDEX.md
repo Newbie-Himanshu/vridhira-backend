@@ -1,4 +1,4 @@
-# himanshu Licensing Overview
+# Himanshu Licensing Overview
 
 **Quick Links to All License Documents**
 
@@ -67,7 +67,7 @@ For businesses and commercial deployments
 
 ### I'm **Building for a Client** → Use Commercial License (PAID)
 ✅ You need a license (your responsibility)
-✅ Disclose himanshu to your client
+✅ Disclose Himanshu to your client
 ✅ Pay royalties from your revenue
 [👉 Get Started](./COMMERCIAL-LICENSE.md)
 
@@ -124,7 +124,7 @@ Ask yourself these questions in order:
    - YES → Community License (FREE)
    - NO → Commercial License
 
-**Still unsure?** → Email: himanshu@example.com
+**Still unsure?** → Email: hk8913114@gmail.com
 
 ---
 
@@ -149,14 +149,14 @@ Ask yourself these questions in order:
 ## 📞 Contact & Support
 
 ### License Inquiries
-📧 **Email:** himanshu@example.com
+📧 **Email:** hk8913114@gmail.com
 
 ### Community Questions
-🐙 **GitHub Issues:** https://github.com/Newbie-Himanshu/himanshu-frontend/issues
+🐙 **GitHub Issues:** https://github.com/Newbie-Himanshu/Himanshu-frontend/issues
 
 ### Commercial Licensing
-📧 **Email:** himanshu@example.com
-Subject: "himanshu Commercial License - [Your Company Name]"
+📧 **Email:** hk8913114@gmail.com
+Subject: "Himanshu Commercial License - [Your Company Name]"
 
 ---
 
@@ -195,7 +195,7 @@ Subject: "himanshu Commercial License - [Your Company Name]"
 
 ## 📜 Legal Notice
 
-By using himanshu, you agree to comply with the applicable license terms:
+By using Himanshu, you agree to comply with the applicable license terms:
 
 - **Community users:** Must comply with [COMMUNITY-LICENSE.md](./COMMUNITY-LICENSE.md)
 - **Commercial users:** Must have signed [COMMERCIAL-LICENSE-AGREEMENT.md](./COMMERCIAL-LICENSE-AGREEMENT.md)
@@ -210,7 +210,7 @@ Violations may result in:
 
 ## 🙌 Thank You
 
-Whether you choose Community or Commercial License, thank you for using himanshu!
+Whether you choose Community or Commercial License, thank you for using Himanshu!
 
 Your support helps sustain this project and make it better for everyone.
 
@@ -219,4 +219,4 @@ Your support helps sustain this project and make it better for everyone.
 ---
 
 **Last Updated:** March 2026
-**Questions?** → himanshu@example.com
+**Questions?** → hk8913114@gmail.com
