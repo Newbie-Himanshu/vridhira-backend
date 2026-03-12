@@ -1,6 +1,6 @@
 # Commercial License — Monthly Payment Schedule & Procedures
 
-**For Vridhira E-Commerce Commercial Licensees**
+**For himanshu E-Commerce Commercial Licensees**
 
 ---
 
@@ -68,10 +68,10 @@ Total Payment Due = Monthly Royalty + Any Previous Month Arrears
 ### By 15th of Each Month, Email This Report:
 
 ```
-Subject: [Company Name] - Vridhira Royalty Report - [Month/Year]
+Subject: [Company Name] - himanshu Royalty Report - [Month/Year]
 
 ────────────────────────────────────────────────────────────────
-VRIDHIRA COMMERCIAL LICENSE - MONTHLY ROYALTY REPORT
+himanshu COMMERCIAL LICENSE - MONTHLY ROYALTY REPORT
 
 Report Month:              March 2026
 Company Name:              [Your Company]
@@ -101,7 +101,7 @@ PAYMENT DETAILS:
   Current Month Royalty:     ₹______________
   TOTAL AMOUNT DUE:          ₹______________
 
-  Payment Reference:         Vridhira-[CompanyName]-[Month-YYYY]
+  Payment Reference:         himanshu-[CompanyName]-[Month-YYYY]
 
 CERTIFICATION:
   I certify that the above revenue figures are accurate and based on
@@ -138,11 +138,11 @@ IFSC Code:         [To be provided]
 Always use this format in your bank transfer reference/description:
 
 ```
-Vridhira-[CompanyName]-[MonthYear]
+himanshu-[CompanyName]-[MonthYear]
 
 Example:
-  Vridhira-AcmeShop-March2026
-  Vridhira-TechMart-Apr2026
+  himanshu-AcmeShop-March2026
+  himanshu-TechMart-Apr2026
 ```
 
 ### Email Confirmation Template
@@ -150,7 +150,7 @@ Example:
 After making the transfer, email confirmation:
 
 ```
-Subject: Vridhira Royalty Payment Confirmation - [Month/Year]
+Subject: himanshu Royalty Payment Confirmation - [Month/Year]
 
 Payment Submitted:
   Company Name:        [Your Company]
@@ -295,7 +295,7 @@ Interest Rate:     None (no interest on refunds)
      - Accounting summary
      - Sales report
    - Email to: himanshu@example.com
-   - Subject: "[Company] Vridhira Report - [Month/Year]"
+   - Subject: "[Company] himanshu Report - [Month/Year]"
 
 ### 4️⃣ **Days 11-14: Licensor Review**
    - Licensor acknowledges receipt
@@ -373,7 +373,7 @@ Submitting false revenue figures is:
 
 ### Contact Licensor:
 📧 **Email:** himanshu@example.com
-Subject: "Vridhira Payment Question - [Your Company]"
+Subject: "himanshu Payment Question - [Your Company]"
 
 ---
 

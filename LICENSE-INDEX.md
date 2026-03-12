@@ -1,4 +1,4 @@
-# Vridhira Licensing Overview
+# himanshu Licensing Overview
 
 **Quick Links to All License Documents**
 
@@ -67,7 +67,7 @@ For businesses and commercial deployments
 
 ### I'm **Building for a Client** → Use Commercial License (PAID)
 ✅ You need a license (your responsibility)
-✅ Disclose Vridhira to your client
+✅ Disclose himanshu to your client
 ✅ Pay royalties from your revenue
 [👉 Get Started](./COMMERCIAL-LICENSE.md)
 
@@ -152,11 +152,11 @@ Ask yourself these questions in order:
 📧 **Email:** himanshu@example.com
 
 ### Community Questions
-🐙 **GitHub Issues:** https://github.com/Newbie-Himanshu/vridhira-frontend/issues
+🐙 **GitHub Issues:** https://github.com/Newbie-Himanshu/himanshu-frontend/issues
 
 ### Commercial Licensing
 📧 **Email:** himanshu@example.com
-Subject: "Vridhira Commercial License - [Your Company Name]"
+Subject: "himanshu Commercial License - [Your Company Name]"
 
 ---
 
@@ -195,7 +195,7 @@ Subject: "Vridhira Commercial License - [Your Company Name]"
 
 ## 📜 Legal Notice
 
-By using Vridhira, you agree to comply with the applicable license terms:
+By using himanshu, you agree to comply with the applicable license terms:
 
 - **Community users:** Must comply with [COMMUNITY-LICENSE.md](./COMMUNITY-LICENSE.md)
 - **Commercial users:** Must have signed [COMMERCIAL-LICENSE-AGREEMENT.md](./COMMERCIAL-LICENSE-AGREEMENT.md)
@@ -210,7 +210,7 @@ Violations may result in:
 
 ## 🙌 Thank You
 
-Whether you choose Community or Commercial License, thank you for using Vridhira!
+Whether you choose Community or Commercial License, thank you for using himanshu!
 
 Your support helps sustain this project and make it better for everyone.
 
