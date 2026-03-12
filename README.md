@@ -1,6 +1,6 @@
-# Himanshu Marketplace — Backend
+# The Marketplace — E-Commerce Backend for Indian Artisans
 
-An India-focused e-commerce backend built on **MedusaJS v2**, extending the framework with payment, fulfilment, search, analytics, and communication integrations tailored for the Indian market.
+It is an India-focused e-commerce backend built on **MedusaJS v2**, extending the framework with payment, fulfilment, search, analytics, and communication integrations tailored for the Indian market.
 
 ---
 

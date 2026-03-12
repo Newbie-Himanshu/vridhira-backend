@@ -152,7 +152,7 @@ Ask yourself these questions in order:
 📧 **Email:** hk8913114@gmail.com
 
 ### Community Questions
-🐙 **GitHub Issues:** https://github.com/Newbie-Himanshu/Himanshu-frontend/issues
+🐙 **GitHub Issues:** https://github.com/Newbie-Himanshu/backend/issues
 
 ### Commercial Licensing
 📧 **Email:** hk8913114@gmail.com
