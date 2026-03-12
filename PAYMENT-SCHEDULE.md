@@ -294,7 +294,7 @@ Interest Rate:     None (no interest on refunds)
      - Bank statement (redacted)
      - Accounting summary
      - Sales report
-   - Email to: himanshu@example.com
+   - Email to: hk8913114@gmail.com
    - Subject: "[Company] himanshu Report - [Month/Year]"
 
 ### 4️⃣ **Days 11-14: Licensor Review**
@@ -372,7 +372,7 @@ Submitting false revenue figures is:
 - ✅ This file (payment procedures)
 
 ### Contact Licensor:
-📧 **Email:** himanshu@example.com
+📧 **Email:** hk8913114@gmail.com
 Subject: "himanshu Payment Question - [Your Company]"
 
 ---
@@ -392,7 +392,7 @@ Subject: "himanshu Payment Question - [Your Company]"
 
 **Ready to get started?**
 
-📧 Email: himanshu@example.com with your company details to receive full bank account information and official agreement.
+📧 Email: hk8913114@gmail.com with your company details to receive full bank account information and official agreement.
 
 **Let's build this together! 🚀**
 
