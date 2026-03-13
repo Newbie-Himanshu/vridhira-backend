@@ -60,7 +60,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
             })
         }
 
-        const shiprocketService = req.scope.resolve<ShiprocketService>("shiprocketService")
+        const shiprocketService = new ShiprocketService()
 
         const result = await shiprocketService.getRemittances({
             from,

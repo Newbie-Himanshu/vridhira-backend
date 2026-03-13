@@ -126,8 +126,11 @@ class ShiprocketFulfillmentService extends AbstractFulfillmentProviderService {
             // Use resolveShipmentDimensions so checkout weight is consistent with
             // the actual weight sent at shipment creation — single source of truth.
             const dims = resolveShipmentDimensions(cart.items ?? [])
-            const isCod = cart?.payment_session?.provider_id === "cod" ||
-                cart?.payment_sessions?.some((s: any) => s.provider_id === "cod" && s.is_selected)
+            // In Medusa v2, CartDTO does not include payment_session/payment_sessions —
+            // payment is selected AFTER shipping in the checkout flow. Read from the
+            // shipping method's `data` object instead; the storefront can pass
+            // { is_cod: true } when it knows the customer selected COD.
+            const isCod = (data as any)?.is_cod === true
 
             const rates = await this.shiprocketService_.getShippingRates(
                 address.postal_code,
@@ -145,7 +148,7 @@ class ShiprocketFulfillmentService extends AbstractFulfillmentProviderService {
             // Standard = cheapest courier; Express = fastest (fewest estimated days)
             const isExpress = (optionData?.id as string)?.includes("express")
             const selectedRate = isExpress
-                ? rates.slice().sort((a: any, b: any) => (a.estimated_days ?? 99) - (b.estimated_days ?? 99))[0]
+                ? rates.slice().sort((a: any, b: any) => (a.etd ?? 99) - (b.etd ?? 99))[0]
                 : rates[0]
 
             // Load admin-configurable markup settings

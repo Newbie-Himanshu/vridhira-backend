@@ -61,7 +61,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
             })
         }
 
-        const shiprocketService = req.scope.resolve<ShiprocketService>("shiprocketService")
+        const shiprocketService = new ShiprocketService()
 
         const data = await shiprocketService.checkServiceability(
             pincode,
