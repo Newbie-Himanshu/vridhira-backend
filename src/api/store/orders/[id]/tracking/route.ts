@@ -79,7 +79,7 @@ export async function GET(
         }
         // ── End AWB ownership check ───────────────────────────────────────────
 
-        const shiprocketService = req.scope.resolve<ShiprocketService>("shiprocketService")
+        const shiprocketService = new ShiprocketService()
 
         const tracking = await shiprocketService.trackShipment(awb)
 
