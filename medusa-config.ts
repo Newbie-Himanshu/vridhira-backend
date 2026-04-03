@@ -48,8 +48,12 @@ module.exports = defineConfig({
       storeCors: process.env.STORE_CORS!,
       adminCors: process.env.ADMIN_CORS!,
       authCors: process.env.AUTH_CORS!,
-      jwtSecret: process.env.JWT_SECRET || "supersecret",
-      cookieSecret: process.env.COOKIE_SECRET || "supersecret",
+      jwtSecret: process.env.JWT_SECRET || (() => {
+        throw new Error('[SECURITY] JWT_SECRET environment variable is required. Generate with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"')
+      })(),
+      cookieSecret: process.env.COOKIE_SECRET || (() => {
+        throw new Error('[SECURITY] COOKIE_SECRET environment variable is required. Generate a strong random value.')
+      })(),
     }
   },
   // ── Official Marketplace Plugins ───────────────────────────────────────────
