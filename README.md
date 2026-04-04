@@ -1,6 +1,6 @@
 # The Marketplace — E-Commerce Backend for Indian Artisans
 
-> ⚠️ **License Notice:** This project is **not MIT-licensed**. It uses a custom **Dual-License (Community/Commercial) v2.0**. Free for students and non-profit use. Commercial use requires a paid license with a 5–10% monthly royalty. See [LICENSE](./LICENSE) and [LICENSE-INDEX.md](./LICENSE-INDEX.md) before using this in any project.
+> ⚠️ **License Notice:** This project is **not MIT-licensed**. Commercial use is **prohibited by default**. Commercial rights are granted only through an explicit, signed Commercial License Agreement. Review [LICENSE](./LICENSE), [COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md), and [LICENSING-GUIDE.md](./LICENSING-GUIDE.md).
 
 It is an India-focused e-commerce backend built on **MedusaJS v2**, extending the framework with payment, fulfilment, search, analytics, and communication integrations tailored for the Indian market.
 
@@ -287,16 +287,16 @@ Full engineering docs are in the [`docs/`](docs/) folder:
 
 ## License
 
-This project is licensed under a custom **Dual-License (Community/Commercial) v2.0** — it is **not MIT**.
+This project is licensed under a custom restricted model and is **not MIT**.
 
-| Use Case | License | Cost |
-|----------|---------|------|
-| Students, learners, non-profit | Community License | **Free** |
-| Commercial / revenue-generating | Commercial License | **5–10% monthly royalty** |
+| Use Case | Access |
+|----------|--------|
+| Non-commercial, academic, non-profit | Allowed under public license terms |
+| Any commercial, revenue, SaaS/PaaS, or corporate deployment | Not allowed unless explicitly approved and signed |
 
-📖 [View Full License](./LICENSE) &nbsp;·&nbsp; 🗂️ [License Index](./LICENSE-INDEX.md) &nbsp;·&nbsp; 📋 [Commercial Agreement](./COMMERCIAL-LICENSE-AGREEMENT.md)
+For commercial use, do not deploy first and ask later. Contact **hk8913114@gmail.com** to request a strict B2B license scoped to your organization and intended deployment.
 
-> ❓ Not sure which applies to you? See [LICENSING-GUIDE.md](./LICENSING-GUIDE.md) or email **hk8913114@gmail.com**
+📖 [View Full License](./LICENSE) &nbsp;·&nbsp; 📘 [Licensing Guide](./LICENSING-GUIDE.md) &nbsp;·&nbsp; 📜 [Commercial Terms](./COMMERCIAL-LICENSE.md) &nbsp;·&nbsp; 📝 [Commercial Agreement Template](./COMMERCIAL-LICENSE-AGREEMENT.md) &nbsp;·&nbsp; ⚠️ [Fork Owner License Renewal Notice](./FORK_LICENSE_RENEWAL_NOTICE.md)
 
 ---
 

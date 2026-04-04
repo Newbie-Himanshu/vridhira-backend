@@ -36,7 +36,7 @@ You may use the Software WITHOUT PAYMENT if you are:
 ## License Grant
 
 Subject to compliance with this Community License, you have the worldwide,
-royalty-free, non-exclusive right to:
+no-fee, non-exclusive right to:
 
 - Use, copy, modify, and run the software
 - Create derivative works and improvements
